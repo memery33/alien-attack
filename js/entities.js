@@ -1,0 +1,330 @@
+/* entities.js — actors for the side-scrolling raids: Player, Enemy, Boss,
+   Bullet, Pickup, Particle. Physics + AI live here; the Mission orchestrates. */
+
+(function () {
+  const U = G.util;
+  const T = G.data.tune;
+
+  class Particle {
+    constructor(x, y, color) {
+      this.x = x; this.y = y;
+      this.vx = U.rand(-3, 3); this.vy = U.rand(-4, 1);
+      this.life = U.rand(18, 34); this.max = this.life;
+      this.color = color; this.size = U.rand(1.5, 3.5);
+    }
+    update() {
+      this.x += this.vx; this.y += this.vy;
+      this.vy += 0.2; this.life--;
+    }
+    get dead() { return this.life <= 0; }
+    draw(ctx, cam) {
+      ctx.globalAlpha = Math.max(0, this.life / this.max);
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x - cam - this.size / 2, this.y - this.size / 2, this.size, this.size);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  class Bullet {
+    constructor(x, y, vx, vy, dmg, owner, color) {
+      this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+      this.dmg = dmg; this.owner = owner; // 'player' | 'enemy'
+      this.w = 6; this.h = 3; this.color = color || (owner === 'player' ? '#36e0d8' : '#ff7755');
+      this.dead = false;
+      this.life = 120;
+    }
+    update() {
+      this.x += this.vx; this.y += this.vy; this.life--;
+      if (this.life <= 0) this.dead = true;
+    }
+    draw(ctx, cam) {
+      ctx.save();
+      ctx.shadowColor = this.color; ctx.shadowBlur = 8;
+      ctx.fillStyle = this.color;
+      const w = Math.max(this.w, Math.abs(this.vx) * 0.6);
+      ctx.fillRect(this.x - cam, this.y - this.h / 2, this.vx >= 0 ? w : -w, this.h);
+      ctx.restore();
+    }
+  }
+
+  class Pickup {
+    constructor(x, y, kind, amount) {
+      this.x = x; this.y = y; this.w = 18; this.h = 18;
+      this.kind = kind;     // 'tech' | 'health' | 'scrap'
+      this.amount = amount || 0;
+      this.dead = false;
+      this.bob = Math.random() * Math.PI * 2;
+    }
+    update() { this.bob += 0.08; }
+    draw(ctx, cam) {
+      const y = this.y + Math.sin(this.bob) * 4;
+      ctx.save();
+      const colors = { tech: '#9a6cff', health: '#4be08a', scrap: '#c7a06b' };
+      ctx.shadowColor = colors[this.kind]; ctx.shadowBlur = 14;
+      ctx.fillStyle = colors[this.kind];
+      if (this.kind === 'tech') {
+        // diamond
+        ctx.translate(this.x - cam + this.w / 2, y + this.h / 2);
+        ctx.rotate(this.bob * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(0, -11); ctx.lineTo(9, 0); ctx.lineTo(0, 11); ctx.lineTo(-9, 0);
+        ctx.closePath(); ctx.fill();
+      } else if (this.kind === 'health') {
+        ctx.fillRect(this.x - cam + 6, y, 6, 18);
+        ctx.fillRect(this.x - cam, y + 6, 18, 6);
+      } else {
+        ctx.fillRect(this.x - cam, y, this.w, this.h);
+      }
+      ctx.restore();
+    }
+  }
+
+  class Player {
+    constructor(x, y, weapon, maxHP) {
+      this.x = x; this.y = y; this.w = 26; this.h = 44;
+      this.vx = 0; this.vy = 0;
+      this.onGround = false;
+      this.facing = 1;
+      this.weapon = weapon;
+      this.maxHP = maxHP; this.hp = maxHP;
+      this.cooldown = 0;
+      this.ammo = weapon.mag; this.reload = 0;
+      this.invuln = 0;
+      this.walkAnim = 0;
+    }
+    get cx() { return this.x + this.w / 2; }
+    get cy() { return this.y + this.h / 2; }
+
+    update(mission) {
+      const inp = G.input;
+      // horizontal
+      if (inp.left())  { this.vx = -T.playerSpeed; this.facing = -1; }
+      else if (inp.right()) { this.vx = T.playerSpeed; this.facing = 1; }
+      else this.vx = 0;
+
+      if (Math.abs(this.vx) > 0) this.walkAnim += 0.25; else this.walkAnim = 0;
+
+      // jump
+      if (inp.jumpPressed() && this.onGround) {
+        this.vy = -T.jumpForce; this.onGround = false; G.audio.jump();
+      }
+      // gravity
+      this.vy += T.gravity;
+      if (this.vy > 16) this.vy = 16;
+
+      // apply with terrain collision (handled by mission via ground segments)
+      mission.moveActor(this);
+
+      // shooting
+      if (this.cooldown > 0) this.cooldown--;
+      if (this.reload > 0) { this.reload--; if (this.reload === 0) this.ammo = this.weapon.mag; }
+      if (inp.shooting() && this.cooldown === 0 && this.reload === 0) {
+        this.shoot(mission);
+      }
+      if (this.invuln > 0) this.invuln--;
+    }
+
+    shoot(mission) {
+      if (this.ammo <= 0) { this.reload = 45; G.audio.deny(); return; }
+      this.ammo--;
+      this.cooldown = this.weapon.fireRate;
+      const bx = this.facing > 0 ? this.x + this.w : this.x;
+      const by = this.y + 16;
+      mission.bullets.push(new Bullet(bx, by, this.facing * this.weapon.bulletSpeed, 0, this.weapon.dmg, 'player'));
+      G.audio.shoot();
+      if (this.ammo === 0) this.reload = 45;
+    }
+
+    hurt(dmg) {
+      if (this.invuln > 0) return;
+      this.hp -= dmg; this.invuln = 40; G.audio.hurt();
+      if (this.hp < 0) this.hp = 0;
+    }
+
+    draw(ctx, cam) {
+      const x = this.x - cam, y = this.y;
+      ctx.save();
+      if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) ctx.globalAlpha = 0.4;
+      // legs
+      const legSwing = Math.sin(this.walkAnim) * 6;
+      ctx.fillStyle = '#23304a';
+      ctx.fillRect(x + 4, y + 30, 7, 14 + (this.onGround ? legSwing : 0) * 0.0);
+      ctx.fillRect(x + 15, y + 30, 7, 14);
+      // body — armored suit
+      ctx.fillStyle = '#39507a';
+      ctx.fillRect(x + 2, y + 12, this.w - 4, 22);
+      ctx.fillStyle = '#4a6aa0';
+      ctx.fillRect(x + 2, y + 12, this.w - 4, 6);
+      // visor head
+      ctx.fillStyle = '#1a2336';
+      ctx.fillRect(x + 6, y, 14, 14);
+      ctx.fillStyle = '#36e0d8';
+      ctx.fillRect(x + (this.facing > 0 ? 12 : 7), y + 4, 6, 4);
+      // gun
+      ctx.fillStyle = '#cdd7e6';
+      const gx = this.facing > 0 ? x + this.w - 2 : x - 12;
+      ctx.fillRect(gx, y + 16, 14, 5);
+      ctx.restore();
+    }
+  }
+
+  class Enemy {
+    constructor(type, x, y, def) {
+      this.type = type;
+      this.def = def;
+      this.x = x; this.y = y; this.w = def.w; this.h = def.h;
+      this.hp = def.hp; this.maxHP = def.hp;
+      this.vx = 0; this.vy = 0;
+      this.onGround = false;
+      this.cooldown = U.randInt(20, def.fireRate || 60);
+      this.dead = false;
+      this.flash = 0;
+      this.baseY = y;
+      this.t = Math.random() * Math.PI * 2;
+    }
+    get cx() { return this.x + this.w / 2; }
+    get cy() { return this.y + this.h / 2; }
+
+    update(mission) {
+      const p = mission.player;
+      const def = this.def;
+      const dx = p.cx - this.cx;
+      const dir = Math.sign(dx) || 1;
+
+      if (def.fly) {
+        // hover toward player at a height, bob
+        this.t += 0.05;
+        const targetY = p.cy - 60 + Math.sin(this.t) * 30;
+        this.y += U.clamp(targetY - this.y, -def.speed, def.speed);
+        if (Math.abs(dx) > 120) this.x += dir * def.speed;
+        else this.x += dir * def.speed * 0.3;
+      } else if (def.fixed) {
+        // turret — stays put, gravity to settle
+        this.vy += T.gravity; mission.moveActor(this);
+      } else {
+        // walker — chase if in range
+        if (Math.abs(dx) < 360) this.vx = dir * def.speed;
+        else this.vx = 0;
+        this.vy += T.gravity;
+        mission.moveActor(this);
+      }
+
+      // contact damage
+      if (U.aabb(this, p)) p.hurt(def.dmg * 0.04 + 0.2);
+
+      // ranged fire
+      if (def.fireRate > 0) {
+        this.cooldown--;
+        if (this.cooldown <= 0 && Math.abs(dx) < 460 && Math.abs(p.cy - this.cy) < 120) {
+          this.cooldown = def.fireRate + U.randInt(-8, 8);
+          const speed = 5;
+          const ang = Math.atan2(p.cy - this.cy, p.cx - this.cx);
+          mission.bullets.push(new Bullet(this.cx, this.cy, Math.cos(ang) * speed, Math.sin(ang) * speed, def.dmg, 'enemy'));
+          G.audio.enemyShot();
+        }
+      }
+      if (this.flash > 0) this.flash--;
+    }
+
+    hurt(dmg, mission) {
+      this.hp -= dmg; this.flash = 6;
+      for (let i = 0; i < 3; i++) mission.particles.push(new Particle(this.cx, this.cy, this.def.color));
+      if (this.hp <= 0) { this.dead = true; this.die(mission); }
+    }
+
+    die(mission) {
+      for (let i = 0; i < 14; i++) mission.particles.push(new Particle(this.cx, this.cy, this.def.color));
+      G.audio.explode();
+      mission.kills++;
+      mission.score += this.def.score;
+      // chance to drop pickups
+      if (U.chance(0.25)) mission.pickups.push(new Pickup(this.cx, this.cy, 'health', 20));
+      else if (U.chance(0.4)) mission.pickups.push(new Pickup(this.cx, this.cy, 'scrap', U.randInt(2, 6)));
+    }
+
+    draw(ctx, cam) {
+      const x = this.x - cam, y = this.y;
+      ctx.save();
+      ctx.fillStyle = this.flash > 0 ? '#ffffff' : this.def.color;
+      ctx.shadowColor = this.def.color; ctx.shadowBlur = this.def.fly ? 10 : 0;
+      if (this.def.fly) {
+        // saucer drone
+        ctx.beginPath();
+        ctx.ellipse(x + this.w / 2, y + this.h / 2, this.w / 2, this.h / 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0b1018';
+        ctx.fillRect(x + this.w / 2 - 3, y + this.h / 2 - 1, 6, 3);
+      } else if (this.def.fixed) {
+        ctx.fillRect(x, y, this.w, this.h);
+        ctx.fillStyle = '#0b1018';
+        ctx.fillRect(x + 4, y + this.h / 2 - 3, this.w - 8, 6);
+      } else {
+        // humanoid
+        ctx.fillRect(x + 3, y, this.w - 6, this.h);
+        ctx.fillStyle = '#0b1018';
+        ctx.fillRect(x + 5, y + 4, this.w - 10, 6);
+      }
+      ctx.restore();
+      // hp bar
+      if (this.hp < this.maxHP) {
+        ctx.fillStyle = '#22120f';
+        ctx.fillRect(x, y - 7, this.w, 3);
+        ctx.fillStyle = '#ff5566';
+        ctx.fillRect(x, y - 7, this.w * (this.hp / this.maxHP), 3);
+      }
+    }
+  }
+
+  class Boss extends Enemy {
+    constructor(def, x, y) {
+      super('boss', x, y, def);
+      this.phase = 0;
+      this.salvo = 0;
+    }
+    update(mission) {
+      const p = mission.player;
+      this.t += 0.02;
+      // float menacingly, track player loosely
+      this.y = this.baseY + Math.sin(this.t) * 24;
+      const dx = p.cx - this.cx;
+      if (Math.abs(dx) > 220) this.x += Math.sign(dx) * 1.1;
+
+      this.cooldown--;
+      if (this.cooldown <= 0) {
+        this.cooldown = this.def.fireRate;
+        // spread shot
+        const n = 3 + Math.floor((1 - this.hp / this.maxHP) * 4);
+        const baseAng = Math.atan2(p.cy - this.cy, p.cx - this.cx);
+        for (let i = 0; i < n; i++) {
+          const ang = baseAng + (i - (n - 1) / 2) * 0.18;
+          const sp = 4.5;
+          mission.bullets.push(new Bullet(this.cx, this.cy, Math.cos(ang) * sp, Math.sin(ang) * sp, this.def.dmg, 'enemy', '#ff88aa'));
+        }
+        G.audio.enemyShot();
+      }
+      if (U.aabb(this, p)) p.hurt(this.def.dmg * 0.05 + 0.3);
+      if (this.flash > 0) this.flash--;
+    }
+    draw(ctx, cam) {
+      const x = this.x - cam, y = this.y;
+      ctx.save();
+      ctx.shadowColor = this.def.color; ctx.shadowBlur = 24;
+      ctx.fillStyle = this.flash > 0 ? '#fff' : this.def.color;
+      ctx.beginPath();
+      ctx.ellipse(x + this.w / 2, y + this.h / 2, this.w / 2, this.h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // core eye
+      ctx.fillStyle = '#0b1018';
+      ctx.beginPath();
+      ctx.arc(x + this.w / 2, y + this.h / 2, this.w / 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ff3355';
+      ctx.beginPath();
+      ctx.arc(x + this.w / 2, y + this.h / 2, this.w / 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  G.ent = { Particle, Bullet, Pickup, Player, Enemy, Boss };
+})();

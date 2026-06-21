@@ -1,0 +1,16 @@
+{
+  "name": "SUBSTRATA — Alien Tech Recovery",
+  "short_name": "SUBSTRATA",
+  "description": "A side-scrolling base-builder. Wake from cryo, build an underground bunker, recruit a crew, and raid black sites to recover every fragment of alien technology.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "icons": [
+    { "src": "assets/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

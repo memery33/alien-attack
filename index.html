@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>SUBSTRATA — Alien Tech Recovery</title>
+
+  <!-- PWA / iOS "Add to Home Screen" -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#05070d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SUBSTRATA" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="apple-touch-icon" href="assets/icon-180.png" />
+
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="game-frame">
+    <canvas id="game" width="960" height="540"></canvas>
+
+    <!-- HUD overlay for resources, shown on hub/map -->
+    <div id="hud" class="hidden">
+      <div class="res" title="Scrap — used to build and upgrade rooms">
+        <span class="icon scrap"></span><span id="res-scrap">0</span>
+      </div>
+      <div class="res" title="Energy — powers rooms and gear">
+        <span class="icon energy"></span><span id="res-energy">0</span>
+      </div>
+      <div class="res" title="Rations — keeps your crew alive">
+        <span class="icon food"></span><span id="res-food">0</span>
+      </div>
+      <div class="res" title="Alien tech fragments recovered">
+        <span class="icon tech"></span><span id="res-tech">0</span><span class="muted">/<span id="res-tech-total">0</span></span>
+      </div>
+      <div class="res" title="Survivors in your bunker">
+        <span class="icon crew"></span><span id="res-crew">1</span>
+      </div>
+    </div>
+
+    <!-- DOM panel layer for menus / room dialogs (rendered above canvas) -->
+    <div id="panel-layer" class="hidden"></div>
+
+    <!-- Toast / notification area -->
+    <div id="toasts"></div>
+
+    <!-- On-screen touch controls (shown only on touch devices during raids) -->
+    <div id="touch-controls" class="hidden">
+      <div class="tc-pad">
+        <button id="tc-left" class="tc-btn" aria-label="Move left">◀</button>
+        <button id="tc-right" class="tc-btn" aria-label="Move right">▶</button>
+      </div>
+      <div class="tc-actions">
+        <button id="tc-jump" class="tc-btn tc-big" aria-label="Jump">⤒</button>
+        <button id="tc-shoot" class="tc-btn tc-big tc-fire" aria-label="Shoot">✸</button>
+      </div>
+      <button id="tc-pause" class="tc-pause" aria-label="Pause">II</button>
+    </div>
+  </div>
+
+  <p id="hint">Move: <b>A/D</b> or <b>←/→</b> · Jump: <b>W/Space</b> · Shoot: <b>J</b> or <b>Click</b> · Interact/Confirm: <b>E/Enter</b> · Pause: <b>Esc</b></p>
+
+  <!-- Load order matters: data + helpers first, then systems, then main -->
+  <script src="js/util.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/story.js"></script>
+  <script src="js/base.js"></script>
+  <script src="js/mission.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    // Register service worker for offline play (PWA). Ignored on file://.
+    if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
