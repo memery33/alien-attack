@@ -5,22 +5,54 @@
   const U = G.util;
   const T = G.data.tune;
 
+  // A flexible particle: sparks, smoke, debris chunks, and shockwave rings.
+  // Back-compatible — `new Particle(x, y, color)` still gives a default spark.
   class Particle {
-    constructor(x, y, color) {
+    constructor(x, y, color, opts) {
+      opts = opts || {};
       this.x = x; this.y = y;
-      this.vx = U.rand(-3, 3); this.vy = U.rand(-4, 1);
-      this.life = U.rand(18, 34); this.max = this.life;
-      this.color = color; this.size = U.rand(1.5, 3.5);
+      this.kind = opts.kind || 'spark';   // spark | smoke | debris | ring | glow
+      this.vx = opts.vx != null ? opts.vx : U.rand(-3, 3);
+      this.vy = opts.vy != null ? opts.vy : U.rand(-4, 1);
+      this.life = opts.life != null ? opts.life : U.rand(18, 34);
+      this.max = this.life;
+      this.color = color;
+      this.size = opts.size != null ? opts.size : U.rand(1.5, 3.5);
+      this.grav = opts.grav != null ? opts.grav : 0.2;
+      this.drag = opts.drag != null ? opts.drag : 1;
+      this.glow = opts.glow || 0;
+      this.spin = opts.spin || 0; this.ang = Math.random() * Math.PI * 2;
+      if (this.kind === 'ring') { this.r = opts.r0 || 2; this.grow = opts.grow || 3; }
     }
     update() {
+      if (this.kind === 'ring') { this.r += this.grow; this.grow *= 0.9; this.life--; return; }
       this.x += this.vx; this.y += this.vy;
-      this.vy += 0.2; this.life--;
+      this.vy += this.grav; this.vx *= this.drag; this.vy *= this.drag;
+      if (this.kind === 'smoke') this.size += 0.35;
+      this.ang += this.spin;
+      this.life--;
     }
     get dead() { return this.life <= 0; }
     draw(ctx, cam) {
-      ctx.globalAlpha = Math.max(0, this.life / this.max);
+      const t = Math.max(0, this.life / this.max);
+      const x = this.x - cam;
+      if (this.kind === 'ring') {
+        ctx.save();
+        ctx.globalAlpha = t * 0.6; ctx.strokeStyle = this.color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, this.y, this.r, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore(); return;
+      }
+      ctx.globalAlpha = this.kind === 'smoke' ? t * 0.4 : t;
+      if (this.glow) { ctx.save(); ctx.shadowColor = this.color; ctx.shadowBlur = this.glow; }
       ctx.fillStyle = this.color;
-      ctx.fillRect(this.x - cam - this.size / 2, this.y - this.size / 2, this.size, this.size);
+      const s = this.size * (this.kind === 'spark' ? (0.4 + t * 0.6) : 1);
+      if (this.kind === 'debris') {
+        ctx.save(); ctx.translate(x, this.y); ctx.rotate(this.ang);
+        ctx.fillRect(-s / 2, -s / 2, s, s); ctx.restore();
+      } else {
+        ctx.fillRect(x - s / 2, this.y - s / 2, s, s);
+      }
+      if (this.glow) ctx.restore();
       ctx.globalAlpha = 1;
     }
   }
@@ -38,11 +70,17 @@
       if (this.life <= 0) this.dead = true;
     }
     draw(ctx, cam) {
+      const x = this.x - cam;
       ctx.save();
-      ctx.shadowColor = this.color; ctx.shadowBlur = 8;
-      ctx.fillStyle = this.color;
+      // soft motion trail
+      ctx.globalAlpha = 0.35; ctx.fillStyle = this.color;
+      const tl = Math.max(10, Math.abs(this.vx) * 1.6);
+      ctx.fillRect(x, this.y - this.h / 2, this.vx >= 0 ? -tl : tl, this.h);
+      // bright glowing head
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = this.color; ctx.shadowBlur = 9;
       const w = Math.max(this.w, Math.abs(this.vx) * 0.6);
-      ctx.fillRect(this.x - cam, this.y - this.h / 2, this.vx >= 0 ? w : -w, this.h);
+      ctx.fillRect(x, this.y - this.h / 2, this.vx >= 0 ? w : -w, this.h);
       ctx.restore();
     }
   }
@@ -93,11 +131,13 @@
       this.invuln = 0;
       this.walkAnim = 0;
       this.muzzle = 0;
+      this.recoil = 0;
     }
     get cx() { return this.x + this.w / 2; }
     get cy() { return this.y + this.h / 2; }
 
     update(mission) {
+      this.mission = mission;       // kept so hurt()/effects can reach the FX bus
       const inp = G.input;
       // horizontal
       if (inp.left())  { this.vx = -T.playerSpeed; this.facing = -1; }
@@ -109,13 +149,20 @@
       // jump
       if (inp.jumpPressed() && this.onGround) {
         this.vy = -T.jumpForce; this.onGround = false; G.audio.jump();
+        mission.fx(this.cx, this.y + this.h, '#9fb0c8', 5, { kind: 'smoke', vy: 0.3, grav: -0.03, life: 16, size: 2, drag: 0.92 });
       }
       // gravity
       this.vy += T.gravity;
       if (this.vy > 16) this.vy = 16;
 
       // apply with terrain collision (handled by mission via ground segments)
+      const wasAir = !this.onGround, fallV = this.vy;
       mission.moveActor(this);
+      // landing impact: dust kick + a touch of screen shake on a hard fall
+      if (wasAir && this.onGround && fallV > 7) {
+        mission.fx(this.cx, this.y + this.h, '#9fb0c8', 7, { kind: 'smoke', vy: -0.4, grav: -0.02, life: 18, size: 2.4, drag: 0.9, vx: undefined });
+        mission.addShake(Math.min(3, fallV * 0.18));
+      }
 
       // shooting
       if (this.cooldown > 0) this.cooldown--;
@@ -125,6 +172,7 @@
       }
       if (this.invuln > 0) this.invuln--;
       if (this.muzzle > 0) this.muzzle--;
+      if (this.recoil > 0) this.recoil -= 0.5;
     }
 
     shoot(mission) {
@@ -134,9 +182,17 @@
       const bx = this.facing > 0 ? this.x + this.w : this.x;
       const by = this.y + 16;
       mission.bullets.push(new Bullet(bx, by, this.facing * this.weapon.bulletSpeed, 0, this.weapon.dmg, 'player'));
-      this.muzzle = 4;
+      this.muzzle = 5;
+      // muzzle smoke + a few forward sparks for kick
       const mx = this.facing > 0 ? this.x + this.w + 8 : this.x - 8;
-      for (let i = 0; i < 2; i++) mission.particles.push(new Particle(mx, by, '#bfe9ff'));
+      for (let i = 0; i < 3; i++) {
+        mission.particles.push(new Particle(mx, by, '#bfe9ff', {
+          kind: 'spark', vx: this.facing * U.rand(1, 4), vy: U.rand(-1, 1),
+          life: U.rand(6, 12), size: U.rand(1, 2.4), grav: 0.05, glow: 6,
+        }));
+      }
+      this.recoil = 2;            // visual kickback, read by draw()
+      mission.addShake(0.5);
       G.audio.shoot();
       if (this.ammo === 0) this.reload = 45;
     }
@@ -145,10 +201,16 @@
       if (this.invuln > 0) return;
       this.hp -= dmg; this.invuln = 40; G.audio.hurt();
       if (this.hp < 0) this.hp = 0;
+      // impact feedback: red flash, shake, brief freeze, spray
+      const m = this.mission;
+      if (m) {
+        m.addShake(4); m.addFlash(0.32, 'red'); m.setHitStop(0.05);
+        m.fx(this.cx, this.cy, '#ff5566', 8, { kind: 'spark', life: U.rand(10, 20), glow: 6, grav: 0.15 });
+      }
     }
 
     draw(ctx, cam) {
-      const x = this.x - cam, y = this.y;
+      const x = this.x - cam - this.facing * (this.recoil || 0), y = this.y;
       // contact shadow under the feet
       ctx.save();
       ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
@@ -266,12 +328,26 @@
 
     hurt(dmg, mission) {
       this.hp -= dmg; this.flash = 6;
-      for (let i = 0; i < 3; i++) mission.particles.push(new Particle(this.cx, this.cy, this.def.color));
+      // hit sparks + a floating damage number for readable feedback
+      mission.fx(this.cx, this.cy - this.h * 0.2, '#ffe6a0', 4, { kind: 'spark', life: U.rand(8, 16), glow: 5, grav: 0.12 });
+      mission.floater(this.cx, this.y - 4, Math.round(dmg), '#ffd27a');
+      if (this.isBoss) mission.addShake(1);
       if (this.hp <= 0) { this.dead = true; this.die(mission); }
     }
 
     die(mission) {
-      for (let i = 0; i < 14; i++) mission.particles.push(new Particle(this.cx, this.cy, this.def.color));
+      const c = this.def.color;
+      if (this.isBoss) {
+        // boss: layered explosion, hard shake, white flash, brief freeze
+        mission.burst(this.cx, this.cy, c, 2.4);
+        for (let i = 0; i < 3; i++) {
+          mission.particles.push(new Particle(this.cx, this.cy, '#ffffff', { kind: 'ring', r0: 4 + i * 6, grow: 6, life: 26 }));
+        }
+        mission.addShake(11); mission.addFlash(0.55, 'white'); mission.setHitStop(0.16);
+      } else {
+        mission.burst(this.cx, this.cy, c, 1);
+        mission.addShake(3.2); mission.setHitStop(0.04);
+      }
       G.audio.explode();
       mission.kills++;
       mission.score += this.def.score;
@@ -331,6 +407,7 @@
   class Boss extends Enemy {
     constructor(def, x, y) {
       super('boss', x, y, def);
+      this.isBoss = true;
       this.phase = 0;
       this.salvo = 0;
     }

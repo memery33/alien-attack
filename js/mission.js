@@ -59,6 +59,11 @@
       this.bossSpawned = false;
       this.outcome = null; // 'win' | 'lose'
       this.fadeT = 0;
+      // game-feel buses
+      this.floaters = [];   // floating damage numbers
+      this.shakeMag = 0;    // current screen-shake magnitude (view units)
+      this.flash = null;    // { a, color:'red'|'white' } full-screen impact flash
+      this.hitStop = 0;     // seconds of simulation freeze remaining
 
       this.buildLevel();
       this.initAmbient();
@@ -159,13 +164,52 @@
       }
     }
 
+    // ---------- game-feel bus ----------
+    addShake(m) { if (m > this.shakeMag) this.shakeMag = m; }
+    addFlash(a, color) { if (!this.flash || a > this.flash.a) this.flash = { a, color }; }
+    setHitStop(s) { if (s > this.hitStop) this.hitStop = s; }
+    floater(x, y, text, color) {
+      this.floaters.push({ x, y, vy: -0.9, life: 38, max: 38, text: String(text), color: color || '#fff' });
+    }
+    // spawn `n` particles of the same recipe
+    fx(x, y, color, n, opts) { for (let i = 0; i < n; i++) this.particles.push(new Ent.Particle(x, y, color, opts)); }
+    // a full explosion: sparks + smoke + debris + a shockwave ring. power scales it.
+    burst(x, y, color, power) {
+      power = power || 1;
+      const ns = Math.round(10 * power), nd = Math.round(5 * power);
+      for (let i = 0; i < ns; i++) this.particles.push(new Ent.Particle(x, y, color, {
+        kind: 'spark', vx: U.rand(-5, 5) * power, vy: U.rand(-6, 3) * power,
+        life: U.rand(14, 30), size: U.rand(1.5, 3.5), glow: 6, grav: 0.22, drag: 0.96,
+      }));
+      for (let i = 0; i < nd; i++) this.particles.push(new Ent.Particle(x, y, '#1a1f2b', {
+        kind: 'debris', vx: U.rand(-4, 4) * power, vy: U.rand(-7, -1) * power,
+        life: U.rand(20, 40), size: U.rand(2, 4.5), grav: 0.3, spin: U.rand(-0.4, 0.4), drag: 0.99,
+      }));
+      for (let i = 0; i < 4; i++) this.particles.push(new Ent.Particle(x, y + U.rand(-6, 6), '#3a4250', {
+        kind: 'smoke', vx: U.rand(-1.5, 1.5), vy: U.rand(-1.2, -0.3),
+        life: U.rand(24, 44), size: U.rand(4, 8), grav: -0.02, drag: 0.94,
+      }));
+      this.particles.push(new Ent.Particle(x, y, '#ffffff', { kind: 'ring', r0: 3, grow: 5 * power, life: 22 }));
+    }
+
+    updateFX(dt) {
+      // exponential settle for shake; linear fade for flash
+      this.shakeMag *= Math.exp(-9 * dt);
+      if (this.shakeMag < 0.08) this.shakeMag = 0;
+      if (this.flash) { this.flash.a -= dt * 2.4; if (this.flash.a <= 0) this.flash = null; }
+      for (const f of this.floaters) { f.y += f.vy; f.vy += 0.018; f.life--; }
+      this.floaters = this.floaters.filter(f => f.life > 0);
+    }
+
     update(dt, cw, ch) {
       this.cw = cw; this.ch = ch;
       if (G.input.pausePressed()) { this.togglePause(); return; }
+      this.updateFX(dt);                 // shake/flash/floaters decay even during freezes
       if (this.paused || this.outcome) {
         if (this.outcome) this.fadeT += dt;
         return;
       }
+      if (this.hitStop > 0) { this.hitStop -= dt; return; }   // impact freeze
 
       this.t += dt;
       this.updateAmbient();
@@ -173,9 +217,10 @@
       const p = this.player;
       p.update(this);
 
-      // camera follows player
-      const targetCam = U.clamp(p.cx - this.viewW * 0.4, 0, Math.max(0, this.length - this.viewW));
-      this.cam += (targetCam - this.cam) * 0.12;
+      // camera follows player with a little look-ahead in the facing direction
+      const lead = p.facing * 70 + p.vx * 3;
+      const targetCam = U.clamp(p.cx - this.viewW * 0.4 + lead, 0, Math.max(0, this.length - this.viewW));
+      this.cam += (targetCam - this.cam) * 0.1;
 
       // activate spawns the player has reached
       for (const sp of this.spawns) {
@@ -240,6 +285,9 @@
         if (pk.dead) continue;
         if (U.aabb(pk, p)) {
           pk.dead = true;
+          const col = pk.kind === 'health' ? '#4be08a' : pk.kind === 'tech' ? '#9a6cff' : '#c7a06b';
+          this.fx(pk.x + pk.w / 2, pk.y + pk.h / 2, col, 8, { kind: 'spark', life: U.rand(12, 22), glow: 8, grav: -0.04, drag: 0.92 });
+          this.floater(pk.x + pk.w / 2, pk.y - 2, (pk.kind === 'health' ? '+' : '+') + pk.amount + (pk.kind === 'health' ? ' HP' : pk.kind === 'scrap' ? ' scrap' : ''), col);
           if (pk.kind === 'health') { p.hp = Math.min(p.maxHP, p.hp + pk.amount); G.audio.pickup(); }
           else if (pk.kind === 'scrap') { this._pendingScrap = (this._pendingScrap || 0) + pk.amount; G.audio.pickup(); }
         }
@@ -319,6 +367,10 @@
       const vw = this.viewW, vh = this.viewH;
       ctx.save();
       ctx.scale(this.scale, this.scale);
+      // screen shake — offset the world (not the HUD), drawn inside the scaled space
+      if (this.shakeMag > 0) {
+        ctx.translate((Math.random() * 2 - 1) * this.shakeMag, (Math.random() * 2 - 1) * this.shakeMag);
+      }
       this.drawBackground(ctx, vw, vh);
 
       const cam = this.cam;
@@ -342,9 +394,17 @@
       this.bullets.forEach(b => b.draw(ctx, cam));
       this.particles.forEach(p => p.draw(ctx, cam));
       this.player.draw(ctx, cam);
+      this.drawFloaters(ctx, cam);
       ctx.restore();
 
       this.drawPost(ctx, cw, ch);
+      // impact flash (screen space, above the world, under the HUD)
+      if (this.flash && this.flash.a > 0.01) {
+        const a = this.flash.a;
+        ctx.fillStyle = this.flash.color === 'red'
+          ? `rgba(255,40,60,${a})` : `rgba(255,255,255,${a})`;
+        ctx.fillRect(0, 0, cw, ch);
+      }
       this.drawHUD(ctx, cw, ch);
 
       if (this.outcome) this.drawOutcome(ctx, cw, ch);
@@ -555,6 +615,21 @@
         ctx.restore();
         ctx.globalAlpha = 1;
       }
+    }
+
+    // Floating damage / pickup numbers, drawn in world space (rise + fade).
+    drawFloaters(ctx, cam) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '700 11px Segoe UI, sans-serif';
+      for (const f of this.floaters) {
+        const t = f.life / f.max;
+        ctx.globalAlpha = Math.min(1, t * 1.6);
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillText(f.text, f.x - cam + 0.7, f.y + 0.7);
+        ctx.fillStyle = f.color;
+        ctx.fillText(f.text, f.x - cam, f.y);
+      }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
     }
 
     // Vignette + corner darkening to focus the action.
