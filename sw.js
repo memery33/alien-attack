@@ -1,7 +1,7 @@
 /* sw.js — minimal offline cache so SUBSTRATA runs from the Home Screen
    without a network connection. Bump CACHE when assets change. */
 
-const CACHE = 'substrata-v7';
+const CACHE = 'substrata-v8';
 const ASSETS = [
   './',
   './index.html',

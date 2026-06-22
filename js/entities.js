@@ -369,8 +369,7 @@
       }
       const eKey = 'enemy-' + this.type;
       if (G.assets.image(eKey)) {
-        G.assets.drawIn(ctx, eKey, x, y, this.w, this.h, this.face < 0);
-        if (this.flash > 0) { ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = '#fff'; ctx.fillRect(x, y, this.w, this.h); ctx.restore(); }
+        G.assets.drawIn(ctx, eKey, x, y, this.w, this.h, this.face < 0, { flash: this.flash > 0 ? 0.6 : 0 });
       } else {
         ctx.save();
         ctx.fillStyle = this.flash > 0 ? '#ffffff' : this.def.color;
@@ -440,8 +439,9 @@
       const x = this.x - cam, y = this.y;
       const bKey = 'boss-' + (this.def.key || '');
       if (G.assets.image(bKey)) {
-        G.assets.drawIn(ctx, bKey, x, y, this.w, this.h, this.face < 0);
-        if (this.flash > 0) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.fillRect(x, y, this.w, this.h); ctx.restore(); }
+        G.assets.drawIn(ctx, bKey, x, y, this.w, this.h, this.face < 0, {
+          flash: this.flash > 0 ? 0.55 : 0, glow: 16, glowColor: this.def.color,
+        });
         return;
       }
       ctx.save();

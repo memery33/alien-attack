@@ -16,6 +16,26 @@
 (function () {
   const BASE = 'assets/sprites/';
   const cache = Object.create(null);
+  const whiteCache = Object.create(null); // shape-accurate white silhouettes for hit-flash
+
+  // Build (once) a white silhouette of an image, masked to its alpha, so a
+  // "flash" tints only the sprite's shape — not an ugly bounding square.
+  function whiteOf(name, image) {
+    let c = whiteCache[name];
+    if (c === undefined) {
+      try {
+        c = document.createElement('canvas');
+        c.width = image.naturalWidth; c.height = image.naturalHeight;
+        const g = c.getContext('2d');
+        g.drawImage(image, 0, 0);
+        g.globalCompositeOperation = 'source-in';
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, 0, c.width, c.height);
+      } catch (e) { c = null; }
+      whiteCache[name] = c;
+    }
+    return c;
+  }
 
   // Lazily request an image the first time it's needed. A missing file 404s
   // once, naturalWidth stays 0, and we fall back forever after.
@@ -35,20 +55,26 @@
     image(name) { return img(name); },
 
     // Draw image `name` into the box (x,y,w,h). If `flip` is true, mirror
-    // horizontally (for left-facing actors). Returns false if not loaded so
-    // callers can fall back to procedural drawing.
-    drawIn(ctx, name, x, y, w, h, flip) {
+    // horizontally (for left-facing actors). `opts` may set:
+    //   flash: 0..1   — white shape-accurate tint (hit feedback)
+    //   glow:  px     — soft outer glow radius
+    //   glowColor     — glow colour (default cyan)
+    // Returns false if not loaded so callers can fall back to procedural art.
+    drawIn(ctx, name, x, y, w, h, flip, opts) {
       const i = img(name);
       if (!i) return false;
-      if (flip) {
-        ctx.save();
-        ctx.translate(x + w, y);
-        ctx.scale(-1, 1);
-        ctx.drawImage(i, 0, 0, w, h);
-        ctx.restore();
-      } else {
-        ctx.drawImage(i, x, y, w, h);
+      opts = opts || {};
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      if ('imageSmoothingQuality' in ctx) ctx.imageSmoothingQuality = 'high';
+      if (flip) { ctx.translate(x + w, y); ctx.scale(-1, 1); x = 0; y = 0; }
+      if (opts.glow) { ctx.shadowColor = opts.glowColor || '#36e0d8'; ctx.shadowBlur = opts.glow; }
+      ctx.drawImage(i, x, y, w, h);
+      if (opts.flash > 0) {
+        const wc = whiteOf(name, i);
+        if (wc) { ctx.shadowBlur = 0; ctx.globalAlpha = opts.flash; ctx.drawImage(wc, x, y, w, h); }
       }
+      ctx.restore();
       return true;
     },
 
