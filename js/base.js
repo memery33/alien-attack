@@ -19,6 +19,7 @@
       this.animT = 0;      // cosmetic animation clock
       this.scrollY = 0;
       this.layoutDirty = true;
+      this.elev = null;    // elevator car state machine {y,idx,target,dwell,rider}
     }
 
     get state() { return this.game.state; }
@@ -65,12 +66,17 @@
       this.shaft = { x: pad, y: top, w: shaftW, h: gridBottom - top };
       this.hatch = { x: pad, y: gridBottom + 8, w: cw - pad * 2, h: hatchH };
       this.contentH = this.hatch.y + this.hatch.h + 12;
+      // Elevator floor stops = vertical centre of each room row.
+      this.floorYs = [];
+      for (let r = 0; r < rows; r++) this.floorYs.push(top + r * (cellH + gap) + cellH / 2);
+      this.elev = null; // rebuilt to match new floor positions
       this.layoutDirty = false;
     }
 
     update(dt, cw, ch) {
       if (this.layoutDirty) this.computeLayout(cw, ch);
       this.animT += dt;
+      this.updateElevator(dt);
       // production cycle
       this.cycleT += dt;
       const period = G.data.tune.cycleSeconds;
@@ -121,6 +127,14 @@
       this.drawHatch(ctx);
 
       ctx.restore();
+      this.drawVignette(ctx, cw, ch);
+    }
+
+    // Subtle screen-space darkening at the edges for a "deep underground" feel.
+    drawVignette(ctx, cw, ch) {
+      const g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.35, cw / 2, ch / 2, ch * 0.85);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.42)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
     }
 
     // Layered soil/rock backdrop the bunker is carved into.
@@ -136,25 +150,69 @@
       for (let i = 0; i < 46; i++) ctx.fillRect(hash(i) * cw, hash(i * 1.7) * ch, 2, 2);
     }
 
-    // Elevator shaft connecting the floors, with a bobbing car.
+    // Drive the elevator: travel to a floor, pause, pick a new floor. The car
+    // carries a passenger roughly half the time so the bunker feels in use.
+    updateElevator(dt) {
+      const sh = this.shaft, F = this.floorYs;
+      if (!sh || !F || !F.length) return;
+      if (!this.elev) this.elev = { y: F[0], idx: 0, target: F[0], dwell: 0.8, rider: Math.random() < 0.6 };
+      const e = this.elev;
+      if (e.dwell > 0) {
+        e.dwell -= dt;
+        if (e.dwell <= 0 && F.length > 1) {       // doors close, choose next floor
+          let ni = e.idx; while (ni === e.idx) ni = (Math.random() * F.length) | 0;
+          e.idx = ni; e.target = F[ni]; e.rider = Math.random() < 0.6;
+        }
+        return;
+      }
+      const step = 78 * dt, d = e.target - e.y;
+      if (Math.abs(d) <= step) { e.y = e.target; e.dwell = 1.0 + Math.random() * 1.4; }
+      else e.y += Math.sign(d) * step;
+    }
+
+    // Elevator shaft connecting the floors, with a travelling car + rider.
     drawShaft(ctx) {
       const sh = this.shaft; if (!sh) return;
-      ctx.fillStyle = '#080c14';
+      ctx.fillStyle = '#070a11';
       this.roundRect(ctx, sh.x, sh.y, sh.w, sh.h, 6); ctx.fill();
-      ctx.strokeStyle = 'rgba(54,224,216,0.22)'; ctx.lineWidth = 1; ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.save(); this.roundRect(ctx, sh.x, sh.y, sh.w, sh.h, 6); ctx.clip();
+      // guide rails
+      ctx.strokeStyle = 'rgba(120,150,190,0.16)'; ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(sh.x + sh.w * 0.36, sh.y); ctx.lineTo(sh.x + sh.w * 0.36, sh.y + sh.h);
-      ctx.moveTo(sh.x + sh.w * 0.64, sh.y); ctx.lineTo(sh.x + sh.w * 0.64, sh.y + sh.h);
+      ctx.moveTo(sh.x + sh.w * 0.30, sh.y); ctx.lineTo(sh.x + sh.w * 0.30, sh.y + sh.h);
+      ctx.moveTo(sh.x + sh.w * 0.70, sh.y); ctx.lineTo(sh.x + sh.w * 0.70, sh.y + sh.h);
       ctx.stroke();
-      // car
-      const t = Math.sin(this.animT * 0.5) * 0.5 + 0.5;
-      const carY = sh.y + 6 + t * (sh.h - 30);
-      ctx.fillStyle = '#13243a';
-      this.roundRect(ctx, sh.x + 3, carY, sh.w - 6, 22, 4); ctx.fill();
-      ctx.strokeStyle = 'rgba(54,224,216,0.5)'; ctx.stroke();
-      ctx.fillStyle = 'rgba(54,224,216,0.55)';
-      ctx.fillRect(sh.x + 5, carY + 9, sh.w - 10, 2);
+      // floor-stop ledges
+      for (const fy of (this.floorYs || [])) {
+        ctx.strokeStyle = 'rgba(54,224,216,0.14)';
+        ctx.beginPath(); ctx.moveTo(sh.x + 2, fy + 12); ctx.lineTo(sh.x + sh.w - 2, fy + 12); ctx.stroke();
+      }
+      const e = this.elev;
+      if (e) {
+        const cw = sh.w - 6, cx = sh.x + 3, cy = e.y - 11;
+        const moving = Math.abs(e.target - e.y) > 0.5;
+        // hoist cable
+        ctx.strokeStyle = 'rgba(180,200,220,0.22)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(sh.x + sh.w / 2, sh.y); ctx.lineTo(sh.x + sh.w / 2, cy); ctx.stroke();
+        // car
+        ctx.fillStyle = '#14263d'; this.roundRect(ctx, cx, cy, cw, 22, 4); ctx.fill();
+        ctx.fillStyle = 'rgba(54,224,216,0.10)'; ctx.fillRect(cx + 1, cy + 2, cw - 2, 18); // interior glow
+        // rider (drawn before doors so doors frame them)
+        if (e.rider) this.drawFigure(ctx, sh.x + sh.w / 2, cy + 20, '#9fb6d6', this.animT * 3, 1);
+        // doors: parted while stopped, shut while moving
+        const part = moving ? 0 : 3.2;
+        ctx.fillStyle = '#0b1828';
+        ctx.fillRect(cx, cy + 2, cw / 2 - part, 18);
+        ctx.fillRect(cx + cw / 2 + part, cy + 2, cw / 2 - part, 18);
+        ctx.strokeStyle = moving ? 'rgba(54,224,216,0.85)' : 'rgba(54,224,216,0.45)';
+        ctx.lineWidth = 1; this.roundRect(ctx, cx, cy, cw, 22, 4); ctx.stroke();
+        // status lamp
+        ctx.fillStyle = moving ? '#36e0d8' : '#1f3a4a';
+        ctx.fillRect(cx + cw / 2 - 3, cy - 2, 6, 2);
+      }
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(54,224,216,0.22)'; ctx.lineWidth = 1;
+      this.roundRect(ctx, sh.x, sh.y, sh.w, sh.h, 6); ctx.stroke();
     }
 
     drawHatch(ctx) {
@@ -212,8 +270,15 @@
             ctx.beginPath(); ctx.moveTo(gx, floorY + 3); ctx.lineTo(gx - 6, y + h - 1); ctx.stroke();
           }
         }
-        // crew standing on the floor (always drawn over the interior)
-        this.drawCrew(ctx, x + 12, floorY, room.crew, def.color);
+        // soft ceiling-lamp light pool so built rooms read as "powered"
+        const lamp = ctx.createRadialGradient(x + w * 0.5, y + 3, 2, x + w * 0.5, y + 3, h * 0.95);
+        lamp.addColorStop(0, 'rgba(255,248,230,0.10)'); lamp.addColorStop(1, 'rgba(255,248,230,0)');
+        ctx.fillStyle = lamp; ctx.fillRect(x, y, w, h);
+        // populate: assigned crew + the commander (command) + resting idle crew (bunks)
+        let pop = room.crew || 0;
+        if (def.key === 'command') pop += 1;
+        if (def.key === 'bunks') pop += G.derive.idleCrew(this.state);
+        this.drawRoomCrew(ctx, x, w, floorY, pop, def.color);
       } else {
         // unexcavated dirt
         ctx.fillStyle = '#090b10'; ctx.fillRect(x, y, w, h);
@@ -282,19 +347,40 @@
       return '';
     }
 
-    // Little survivor figures standing in a room.
-    drawCrew(ctx, x, floorY, count, color) {
+    // Survivors patrolling a room's floor, each pacing at its own speed.
+    drawRoomCrew(ctx, cellX, cellW, floorY, count, color) {
       const n = Math.min(count || 0, 6);
+      const left = cellX + 13, right = cellX + cellW - 15, span = Math.max(18, right - left);
       for (let i = 0; i < n; i++) {
-        const cx = x + i * 11;
-        const bob = Math.sin(this.animT * 2 + i * 1.3) * 1.4;
-        ctx.fillStyle = color; ctx.globalAlpha = 0.92;
-        ctx.fillRect(cx, floorY - 11 + bob, 4.5, 8);            // body
-        ctx.beginPath();
-        ctx.arc(cx + 2.2, floorY - 13 + bob, 2.3, 0, Math.PI * 2); // head
-        ctx.fill();
-        ctx.globalAlpha = 1;
+        const sp = 0.22 + (i % 3) * 0.05;          // pace varies per survivor
+        const ph = this.animT * sp + i * 1.7;
+        const tri = Math.abs((ph % 2) - 1);        // 0..1..0 triangle wave
+        const fx = left + tri * span;
+        const facing = (ph % 2) < 1 ? 1 : -1;      // face direction of travel
+        this.drawFigure(ctx, fx, floorY, color, this.animT * 4.5 + i * 2, facing);
       }
+    }
+
+    // A single little survivor with a walk cycle and cyan visor glint.
+    drawFigure(ctx, fx, footY, color, walkPh, facing) {
+      const swing = Math.sin(walkPh) * 1.7;
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      // legs
+      ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(fx, footY - 6); ctx.lineTo(fx - swing, footY);
+      ctx.moveTo(fx, footY - 6); ctx.lineTo(fx + swing, footY);
+      ctx.stroke();
+      // torso
+      ctx.fillStyle = color;
+      this.roundRect(ctx, fx - 2.4, footY - 13.5, 4.8, 8, 1.6); ctx.fill();
+      // head / helmet
+      ctx.beginPath(); ctx.arc(fx, footY - 15.8, 2.6, 0, Math.PI * 2); ctx.fill();
+      // visor glint, on the facing side
+      ctx.fillStyle = 'rgba(150,242,255,0.9)';
+      ctx.fillRect(fx - 0.4 + facing * 0.9, footY - 16.6, 1.6, 1.5);
+      ctx.restore();
     }
 
     roundRect(ctx, x, y, w, h, r) {
