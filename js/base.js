@@ -20,6 +20,7 @@
       this.scrollY = 0;
       this.layoutDirty = true;
       this.elev = null;    // elevator car state machine {y,idx,target,dwell,rider}
+      this.floaters = [];  // rising "+N resource" popups on production ticks
     }
 
     get state() { return this.game.state; }
@@ -77,6 +78,8 @@
       if (this.layoutDirty) this.computeLayout(cw, ch);
       this.animT += dt;
       this.updateElevator(dt);
+      for (const f of this.floaters) { f.y -= 0.4; f.life -= dt; }
+      if (this.floaters.length) this.floaters = this.floaters.filter(f => f.life > 0);
       // production cycle
       this.cycleT += dt;
       const period = G.data.tune.cycleSeconds;
@@ -97,6 +100,8 @@
         if (amt > 0) {
           s[def.produces] = (s[def.produces] || 0) + amt;
           gained[def.produces] = (gained[def.produces] || 0) + amt;
+          const cell = this.cells.find(c => c.key === key);
+          if (cell) this.floaters.push({ x: cell.x + cell.w / 2, y: cell.y + 22, life: 1.7, max: 1.7, text: `+${amt} ${def.produces}`, color: def.color });
         }
       }
       // crew eats rations
@@ -125,9 +130,23 @@
         this.drawRoomCell(ctx, cell, def, built ? s.rooms[cell.key] : null);
       }
       this.drawHatch(ctx);
+      this.drawProdFloaters(ctx);
 
       ctx.restore();
       this.drawVignette(ctx, cw, ch);
+    }
+
+    // Rising "+N resource" popups when a production cycle completes.
+    drawProdFloaters(ctx) {
+      if (!this.floaters.length) return;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '700 12px Segoe UI, sans-serif';
+      for (const f of this.floaters) {
+        ctx.globalAlpha = Math.min(1, f.life / f.max * 1.4);
+        ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(f.text, f.x + 0.8, f.y + 0.8);
+        ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+      }
+      ctx.globalAlpha = 1; ctx.textAlign = 'left';
     }
 
     // Subtle screen-space darkening at the edges for a "deep underground" feel.
@@ -269,6 +288,8 @@
           for (let gx = x + 10; gx < x + w; gx += 16) {
             ctx.beginPath(); ctx.moveTo(gx, floorY + 3); ctx.lineTo(gx - 6, y + h - 1); ctx.stroke();
           }
+          // characteristic equipment so each room reads as purposeful
+          this.drawRoomProps(ctx, def, x, y, w, h, floorY);
         }
         // soft ceiling-lamp light pool so built rooms read as "powered"
         const lamp = ctx.createRadialGradient(x + w * 0.5, y + 3, 2, x + w * 0.5, y + 3, h * 0.95);
@@ -345,6 +366,114 @@
       if (def.key === 'lab') return `${s.decoded}/${s.tech} decoded`;
       if (def.key === 'command') return `${G.derive.visibleBases(s).length} sites`;
       return '';
+    }
+
+    // Characteristic furniture/equipment per room so each chamber is distinct
+    // even before AI room art exists. Drawn inside the clipped chamber.
+    drawRoomProps(ctx, def, x, y, w, h, floorY) {
+      const c = def.color, t = this.animT;
+      const glow = (col, blur) => { ctx.shadowColor = col; ctx.shadowBlur = blur; };
+      ctx.save();
+      switch (def.key) {
+        case 'command': {            // holo map table + back-wall monitors
+          for (let i = 0; i < 3; i++) {
+            ctx.globalAlpha = 0.6; ctx.fillStyle = '#0c1a2a';
+            ctx.fillRect(x + 44 + i * 26, y + 30, 22, 14);
+            ctx.globalAlpha = 0.5; ctx.fillStyle = c;
+            ctx.fillRect(x + 46 + i * 26, y + 32, 18, 2 + (i % 2) * 3);
+          }
+          ctx.globalAlpha = 1;
+          const tx = x + w * 0.5, ty = floorY - 4;
+          ctx.fillStyle = '#0c1a2a'; ctx.fillRect(tx - 16, ty - 6, 32, 6);
+          glow(c, 12); ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t * 2);
+          ctx.fillStyle = c;
+          ctx.beginPath(); ctx.ellipse(tx, ty - 10, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+          break;
+        }
+        case 'bunks': {              // stacked beds + ladder
+          for (let r = 0; r < 2; r++) {
+            const by = floorY - 10 - r * 16;
+            ctx.globalAlpha = 0.8; ctx.fillStyle = '#1a2238';
+            ctx.fillRect(x + 14, by, 34, 6);
+            ctx.fillStyle = c; ctx.globalAlpha = 0.4;
+            ctx.fillRect(x + 16, by + 1, 30, 2);
+          }
+          ctx.globalAlpha = 0.5; ctx.fillStyle = '#2a3550';
+          ctx.fillRect(x + 50, floorY - 26, 3, 26);
+          break;
+        }
+        case 'generator': {          // pulsing reactor core + cabling
+          const cx = x + w * 0.5, cy = y + h * 0.5;
+          const pulse = 0.6 + 0.4 * Math.sin(t * 3);
+          glow(c, 18 * pulse);
+          ctx.globalAlpha = pulse; ctx.fillStyle = c;
+          ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1; ctx.fillStyle = '#fff7d6';
+          ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 0; ctx.strokeStyle = '#2a3550'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(cx - 12, cy); ctx.lineTo(x + 8, cy + 8);
+          ctx.moveTo(cx + 12, cy); ctx.lineTo(x + w - 8, cy + 8); ctx.stroke();
+          break;
+        }
+        case 'kitchen': {            // hydroponic plant racks under grow-lights
+          for (let i = 0; i < 4; i++) {
+            const px = x + 16 + i * ((w - 28) / 4);
+            ctx.globalAlpha = 0.25; glow(c, 8); ctx.fillStyle = c;
+            ctx.fillRect(px, y + 24, 14, 3);
+            ctx.shadowBlur = 0; ctx.globalAlpha = 0.9; ctx.fillStyle = '#3f9d54';
+            const sway = Math.sin(t * 2 + i) * 1.5;
+            ctx.fillRect(px + 4 + sway, floorY - 16, 3, 16);
+            ctx.fillStyle = '#5fc06f';
+            ctx.beginPath(); ctx.arc(px + 5 + sway, floorY - 16, 4, 0, Math.PI * 2); ctx.fill();
+          }
+          break;
+        }
+        case 'workshop': {           // workbench + pegboard + intermittent sparks
+          ctx.globalAlpha = 0.85; ctx.fillStyle = '#26211a';
+          ctx.fillRect(x + 14, floorY - 12, 40, 12);
+          ctx.fillStyle = c; ctx.globalAlpha = 0.4; ctx.fillRect(x + 14, floorY - 12, 40, 2);
+          ctx.globalAlpha = 0.5; ctx.fillStyle = '#3a4250';
+          for (let i = 0; i < 4; i++) ctx.fillRect(x + 18 + i * 8, y + 26, 2, 8);
+          if (Math.sin(t * 9) > 0.7) {
+            glow('#ffd27a', 10); ctx.globalAlpha = 0.9; ctx.fillStyle = '#fff2c0';
+            ctx.fillRect(x + 30 + Math.sin(t * 20) * 6, floorY - 14, 2, 2);
+          }
+          break;
+        }
+        case 'armory': {             // wall weapon racks + ammo crates
+          ctx.globalAlpha = 0.6; ctx.fillStyle = '#2a3550';
+          ctx.fillRect(x + 16, y + 24, 40, 3);
+          for (let i = 0; i < 5; i++) {
+            ctx.fillStyle = '#aeb8c8'; ctx.globalAlpha = 0.8;
+            ctx.fillRect(x + 18 + i * 8, y + 27, 2, 14);
+          }
+          ctx.globalAlpha = 0.8; ctx.fillStyle = '#3a2f22';
+          ctx.fillRect(x + 16, floorY - 10, 14, 10);
+          ctx.strokeStyle = c; ctx.globalAlpha = 0.5; ctx.strokeRect(x + 16, floorY - 10, 14, 10);
+          break;
+        }
+        case 'medbay': {             // med pods + cross
+          for (let i = 0; i < 2; i++) {
+            const px = x + 16 + i * 26;
+            glow(c, 6); ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t * 2 + i);
+            ctx.fillStyle = '#16324a'; this.roundRect(ctx, px, floorY - 16, 20, 16, 5); ctx.fill();
+            ctx.shadowBlur = 0; ctx.globalAlpha = 0.9; ctx.fillStyle = c;
+            ctx.fillRect(px + 8, floorY - 13, 4, 10); ctx.fillRect(px + 5, floorY - 10, 10, 4);
+          }
+          break;
+        }
+        case 'lab': {                // containment field with floating fragment
+          const cx = x + w * 0.5, cy = y + h * 0.46;
+          ctx.globalAlpha = 0.15; glow(c, 14); ctx.fillStyle = c;
+          ctx.beginPath(); ctx.ellipse(cx, cy, 16, 22, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.shadowBlur = 12; ctx.globalAlpha = 0.9; ctx.fillStyle = c;
+          ctx.save(); ctx.translate(cx, cy + Math.sin(t * 1.6) * 3); ctx.rotate(t * 0.8);
+          ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 0); ctx.lineTo(0, 8); ctx.lineTo(-6, 0);
+          ctx.closePath(); ctx.fill(); ctx.restore();
+          break;
+        }
+      }
+      ctx.restore();
     }
 
     // Survivors patrolling a room's floor, each pacing at its own speed.

@@ -56,6 +56,7 @@
       this.mission = null;
       this.setTouchControls(false);
       this.baseScreen.enter();
+      if (G.audio.startMusic) G.audio.startMusic('bunker');
       this.checkVictory();
     },
 
@@ -102,6 +103,7 @@
       this.mission = new G.Mission(this, baseDef);
       this.mission.enter(this.cw, this.ch);
       this.setTouchControls(true);
+      if (G.audio.startMusic) G.audio.startMusic(baseDef.biome || 'silo');
     },
 
     checkVictory() {

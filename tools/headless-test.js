@@ -58,6 +58,8 @@ const sandbox = {
   setTimeout: (fn) => { try { fn(); } catch (e) { throw e; } return 0; },
   clearTimeout: noop,
   requestAnimationFrame: () => 0, // we drive the loop manually
+  setTimeout: () => 0, clearTimeout: noop,   // SFX sequencing / music loop (no-op here)
+  setInterval: () => 0, clearInterval: noop,
   navigator: { maxTouchPoints: 1 },
   localStorage: (() => {
     let store = {};
@@ -80,6 +82,10 @@ const sandbox = {
       state: 'running', currentTime: 0, sampleRate: 44100, resume: noop, destination: chain,
       createOscillator: () => chain, createGain: () => chain,
       createBuffer: () => chain, createBufferSource: () => chain, createBiquadFilter: () => chain,
+      createDynamicsCompressor: () => Object.assign(chain, {
+        threshold: { value: 0 }, knee: { value: 0 }, ratio: { value: 0 },
+        attack: { value: 0 }, release: { value: 0 },
+      }),
     };
   },
 };
