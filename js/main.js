@@ -257,9 +257,9 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       if (this.baseScreen) this.baseScreen.layoutDirty = true;
       if (this.mission) {
-        // keep ground anchored to new height
+        // recompute zoom + ground anchor for the new size
         this.mission.cw = this.cw; this.mission.ch = this.ch;
-        this.mission.groundY = this.ch - 56;
+        if (this.mission.computeView) this.mission.computeView();
       }
     },
   };

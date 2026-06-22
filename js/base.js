@@ -5,11 +5,18 @@
 (function () {
   const U = G.util;
 
+  // Cheap deterministic pseudo-random for static dirt speckle / pebbles.
+  function hash(n) {
+    const s = Math.sin(n * 91.7 + 17.3) * 43758.5453;
+    return s - Math.floor(s);
+  }
+
   class BaseScreen {
     constructor(game) {
       this.game = game;
       this.cells = [];     // tappable room cells {x,y,w,h,key|slotIndex}
       this.cycleT = 0;     // production timer
+      this.animT = 0;      // cosmetic animation clock
       this.scrollY = 0;
       this.layoutDirty = true;
     }
@@ -32,29 +39,38 @@
     computeLayout(cw, ch) {
       this.cells = [];
       const order = this.roomOrder();
-      const pad = 14;
-      const top = 64;            // below HUD
-      const cols = cw < 620 ? 1 : 2;
-      const cellW = (cw - pad * (cols + 1)) / cols;
-      const cellH = 78;
+      const pad = 12;
+      const top = 52;            // below HUD
+      const hatchH = 40;
+      const gap = 9;
+      const shaftW = 24;         // elevator shaft down the left side
+
+      // Rooms tile into a grid; landscape gets more columns.
+      const cols = cw >= 820 ? 4 : cw >= 600 ? 3 : 2;
+      const rows = Math.ceil(order.length / cols);
+      const x0 = pad + shaftW + gap;
+      const cellW = (cw - pad - x0 - gap * (cols - 1)) / cols;
+      // Fit room height to the space between HUD and hatch (no scroll in landscape).
+      const availH = ch - top - hatchH - pad - 10;
+      const cellH = U.clamp((availH - gap * (rows - 1)) / rows, 86, 150);
+
       order.forEach((key, i) => {
         const col = i % cols, row = Math.floor(i / cols);
-        const x = pad + col * (cellW + pad);
-        const y = top + row * (cellH + pad);
+        const x = x0 + col * (cellW + gap);
+        const y = top + row * (cellH + gap);
         this.cells.push({ key, x, y, w: cellW, h: cellH });
       });
-      // hatch button (go to surface map) at the bottom
-      const rows = Math.ceil(order.length / cols);
-      this.hatch = {
-        x: pad, y: top + rows * (cellH + pad) + 4,
-        w: cw - pad * 2, h: 46,
-      };
-      this.contentH = this.hatch.y + this.hatch.h + 16;
+
+      const gridBottom = top + rows * (cellH + gap) - gap;
+      this.shaft = { x: pad, y: top, w: shaftW, h: gridBottom - top };
+      this.hatch = { x: pad, y: gridBottom + 8, w: cw - pad * 2, h: hatchH };
+      this.contentH = this.hatch.y + this.hatch.h + 12;
       this.layoutDirty = false;
     }
 
     update(dt, cw, ch) {
       if (this.layoutDirty) this.computeLayout(cw, ch);
+      this.animT += dt;
       // production cycle
       this.cycleT += dt;
       const period = G.data.tune.cycleSeconds;
@@ -89,13 +105,12 @@
     draw(ctx, cw, ch) {
       if (this.layoutDirty) this.computeLayout(cw, ch);
       ctx.clearRect(0, 0, cw, ch);
-      // dirt/rock backdrop
-      const g = ctx.createLinearGradient(0, 0, 0, ch);
-      g.addColorStop(0, '#0a0f18'); g.addColorStop(1, '#070a11');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
+      this.drawEarth(ctx, cw, ch);
 
       ctx.save();
       ctx.translate(0, -this.scrollY);
+
+      this.drawShaft(ctx);
 
       const s = this.state;
       for (const cell of this.cells) {
@@ -103,60 +118,180 @@
         const def = G.data.rooms[cell.key];
         this.drawRoomCell(ctx, cell, def, built ? s.rooms[cell.key] : null);
       }
-      // hatch
-      const h = this.hatch;
-      ctx.fillStyle = '#10202e';
-      ctx.strokeStyle = '#36e0d8'; ctx.lineWidth = 1.5;
-      this.roundRect(ctx, h.x, h.y, h.w, h.h, 8); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = '#cfe6ff';
-      ctx.font = '600 16px Segoe UI, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('▲  SURFACE HATCH — Launch a Raid', h.x + h.w / 2, h.y + h.h / 2);
+      this.drawHatch(ctx);
 
       ctx.restore();
     }
 
-    drawRoomCell(ctx, cell, def, room) {
-      const { x, y, w, h } = cell;
+    // Layered soil/rock backdrop the bunker is carved into.
+    drawEarth(ctx, cw, ch) {
+      const g = ctx.createLinearGradient(0, 0, 0, ch);
+      g.addColorStop(0, '#0b0f18'); g.addColorStop(1, '#05070d');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
+      // strata lines
+      ctx.fillStyle = 'rgba(255,255,255,0.022)';
+      for (let y = 40; y < ch; y += 44) ctx.fillRect(0, y, cw, 1);
+      // pebbles
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      for (let i = 0; i < 46; i++) ctx.fillRect(hash(i) * cw, hash(i * 1.7) * ch, 2, 2);
+    }
+
+    // Elevator shaft connecting the floors, with a bobbing car.
+    drawShaft(ctx) {
+      const sh = this.shaft; if (!sh) return;
+      ctx.fillStyle = '#080c14';
+      this.roundRect(ctx, sh.x, sh.y, sh.w, sh.h, 6); ctx.fill();
+      ctx.strokeStyle = 'rgba(54,224,216,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      ctx.moveTo(sh.x + sh.w * 0.36, sh.y); ctx.lineTo(sh.x + sh.w * 0.36, sh.y + sh.h);
+      ctx.moveTo(sh.x + sh.w * 0.64, sh.y); ctx.lineTo(sh.x + sh.w * 0.64, sh.y + sh.h);
+      ctx.stroke();
+      // car
+      const t = Math.sin(this.animT * 0.5) * 0.5 + 0.5;
+      const carY = sh.y + 6 + t * (sh.h - 30);
+      ctx.fillStyle = '#13243a';
+      this.roundRect(ctx, sh.x + 3, carY, sh.w - 6, 22, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(54,224,216,0.5)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(54,224,216,0.55)';
+      ctx.fillRect(sh.x + 5, carY + 9, sh.w - 10, 2);
+    }
+
+    drawHatch(ctx) {
+      const h = this.hatch;
+      const g = ctx.createLinearGradient(0, h.y, 0, h.y + h.h);
+      g.addColorStop(0, '#15293c'); g.addColorStop(1, '#0b1a28');
+      ctx.fillStyle = g;
+      this.roundRect(ctx, h.x, h.y, h.w, h.h, 8); ctx.fill();
+      // hazard stripes at each end
       ctx.save();
-      // panel
-      ctx.fillStyle = room ? '#101a2a' : '#0c121c';
-      ctx.strokeStyle = room ? def.color : '#1f3350';
-      ctx.lineWidth = 1.4;
-      this.roundRect(ctx, x, y, w, h, 8); ctx.fill();
-      ctx.globalAlpha = room ? 0.9 : 0.5; ctx.stroke(); ctx.globalAlpha = 1;
-
-      // left color tab + icon
-      ctx.fillStyle = def.color; ctx.globalAlpha = room ? 1 : 0.35;
-      ctx.fillRect(x, y, 5, h);
-      ctx.globalAlpha = 1;
-      ctx.font = '22px serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillStyle = room ? '#fff' : '#41597d';
-      ctx.fillText(def.icon, x + 14, y + 12);
-
-      // name + level
-      ctx.font = '600 14px Segoe UI, sans-serif';
-      ctx.fillStyle = room ? '#eaf3ff' : '#5d7299';
-      ctx.fillText(def.name, x + 44, y + 12);
-
-      ctx.font = '12px Segoe UI, sans-serif';
-      if (room) {
-        ctx.fillStyle = def.color;
-        ctx.fillText('LVL ' + room.level + (def.maxLevel ? '/' + def.maxLevel : ''), x + 44, y + 32);
-        // crew
-        ctx.fillStyle = '#8fb0d8';
-        const crewTxt = def.produces || ['generator','kitchen','workshop'].includes(def.key)
-          ? `👤 ${room.crew}` : '';
-        if (def.produces) ctx.fillText(`👤 ${room.crew}  →  ${def.produces}`, x + 44, y + 50);
-        else if (def.key === 'bunks') ctx.fillText(`max crew ${G.derive.maxCrew(this.state)}`, x + 44, y + 50);
-        else if (def.key === 'armory') ctx.fillText(`weapon: ${G.derive.weapon(this.state).name}`, x + 44, y + 50);
-        else if (def.key === 'medbay') ctx.fillText(`max HP ${G.derive.maxHP(this.state)}`, x + 44, y + 50);
-        else if (def.key === 'lab') ctx.fillText(`decoded ${this.state.decoded}/${this.state.tech}`, x + 44, y + 50);
-        else if (def.key === 'command') ctx.fillText(`sites visible: ${G.derive.visibleBases(this.state).length}`, x + 44, y + 50);
-      } else {
-        ctx.fillStyle = '#5d7299';
-        ctx.fillText('Tap to build · ' + U.fmtCost(def.build), x + 44, y + 36);
+      this.roundRect(ctx, h.x, h.y, h.w, h.h, 8); ctx.clip();
+      ctx.globalAlpha = 0.18; ctx.fillStyle = '#ffb547';
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(h.x + i * 14, h.y); ctx.lineTo(h.x + i * 14 + 10, h.y);
+        ctx.lineTo(h.x + i * 14 - 4, h.y + h.h); ctx.lineTo(h.x + i * 14 - 14, h.y + h.h);
+        ctx.closePath(); ctx.fill();
+        const rx = h.x + h.w;
+        ctx.beginPath();
+        ctx.moveTo(rx - i * 14, h.y); ctx.lineTo(rx - i * 14 - 10, h.y);
+        ctx.lineTo(rx - i * 14 + 4, h.y + h.h); ctx.lineTo(rx - i * 14 + 14, h.y + h.h);
+        ctx.closePath(); ctx.fill();
       }
       ctx.restore();
+      ctx.strokeStyle = '#36e0d8'; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.8;
+      this.roundRect(ctx, h.x, h.y, h.w, h.h, 8); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = '#eafffd';
+      ctx.font = '700 15px Segoe UI, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('▲  SURFACE HATCH — LAUNCH RAID', h.x + h.w / 2, h.y + h.h / 2);
+    }
+
+    drawRoomCell(ctx, cell, def, room) {
+      const { x, y, w, h } = cell;
+      const r = 7;
+      const floorY = y + h - 14;
+      ctx.save();
+
+      // carve the chamber (clip everything inside the rounded room)
+      this.roundRect(ctx, x, y, w, h, r);
+      ctx.save(); ctx.clip();
+      if (room) {
+        const bg = ctx.createLinearGradient(0, y, 0, y + h);
+        bg.addColorStop(0, '#0f1828'); bg.addColorStop(1, '#0a0f1a');
+        ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
+        // colour wash from the room's accent
+        ctx.globalAlpha = 0.13; ctx.fillStyle = def.color;
+        ctx.fillRect(x, y, w, h * 0.55); ctx.globalAlpha = 1;
+        // floor slab + grate
+        ctx.fillStyle = '#0a1220'; ctx.fillRect(x, floorY, w, y + h - floorY);
+        ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x, floorY, w, 1.5);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+        for (let gx = x + 10; gx < x + w; gx += 16) {
+          ctx.beginPath(); ctx.moveTo(gx, floorY + 3); ctx.lineTo(gx - 6, y + h - 1); ctx.stroke();
+        }
+        // crew standing on the floor
+        this.drawCrew(ctx, x + 12, floorY, room.crew, def.color);
+      } else {
+        // unexcavated dirt
+        ctx.fillStyle = '#090b10'; ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        for (let i = 0; i < 16; i++) {
+          ctx.fillRect(x + hash(cell.x + i) * w, y + hash(cell.y + i * 3) * h, 2, 2);
+        }
+      }
+      ctx.restore(); // end clip
+
+      // chamber border
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = room ? def.color : 'rgba(95,114,153,0.45)';
+      ctx.globalAlpha = room ? 0.85 : 0.6;
+      this.roundRect(ctx, x, y, w, h, r); ctx.stroke();
+      ctx.globalAlpha = 1;
+
+      // icon in a recessed panel
+      const is = 28;
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
+      this.roundRect(ctx, x + 9, y + 9, is, is, 5); ctx.fill();
+      if (room) { ctx.strokeStyle = def.color; ctx.globalAlpha = 0.5; ctx.stroke(); ctx.globalAlpha = 1; }
+      ctx.font = '18px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = room ? '#fff' : '#41597d';
+      ctx.fillText(def.icon, x + 9 + is / 2, y + 9 + is / 2 + 1);
+
+      // name
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = '600 12.5px Segoe UI, sans-serif';
+      ctx.fillStyle = room ? '#eaf3ff' : '#6f86ad';
+      ctx.fillText(def.name, x + 44, y + 11);
+
+      if (room) {
+        // level pips
+        const maxL = def.maxLevel || 5;
+        for (let i = 0; i < maxL; i++) {
+          ctx.fillStyle = i < room.level ? def.color : 'rgba(255,255,255,0.12)';
+          ctx.fillRect(x + 44 + i * 8, y + 28, 5, 5);
+        }
+        // status (top-right)
+        const st = this.roomStatus(def, room);
+        if (st) {
+          ctx.font = '10.5px Segoe UI, sans-serif'; ctx.fillStyle = '#8fb0d8';
+          ctx.textAlign = 'right';
+          ctx.fillText(st, x + w - 9, y + 11);
+          ctx.textAlign = 'left';
+        }
+      } else {
+        ctx.font = '10.5px Segoe UI, sans-serif'; ctx.fillStyle = '#5d7299';
+        ctx.fillText('Tap to excavate', x + 44, y + 28);
+        ctx.fillStyle = '#41597d';
+        ctx.fillText(U.fmtCost(def.build), x + 44, y + 43);
+      }
+      ctx.restore();
+    }
+
+    // Short one-line status shown in the top-right of a built room.
+    roomStatus(def, room) {
+      const s = this.state;
+      if (def.produces) return `👤${room.crew} → ${def.produces}`;
+      if (def.key === 'bunks') return `cap ${G.derive.maxCrew(s)}`;
+      if (def.key === 'armory') return G.derive.weapon(s).name;
+      if (def.key === 'medbay') return `HP ${G.derive.maxHP(s)}`;
+      if (def.key === 'lab') return `${s.decoded}/${s.tech} decoded`;
+      if (def.key === 'command') return `${G.derive.visibleBases(s).length} sites`;
+      return '';
+    }
+
+    // Little survivor figures standing in a room.
+    drawCrew(ctx, x, floorY, count, color) {
+      const n = Math.min(count || 0, 6);
+      for (let i = 0; i < n; i++) {
+        const cx = x + i * 11;
+        const bob = Math.sin(this.animT * 2 + i * 1.3) * 1.4;
+        ctx.fillStyle = color; ctx.globalAlpha = 0.92;
+        ctx.fillRect(cx, floorY - 11 + bob, 4.5, 8);            // body
+        ctx.beginPath();
+        ctx.arc(cx + 2.2, floorY - 13 + bob, 2.3, 0, Math.PI * 2); // head
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
     }
 
     roundRect(ctx, x, y, w, h, r) {

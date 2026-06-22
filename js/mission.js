@@ -37,9 +37,10 @@
     enter(cw, ch) {
       G.ui.hudVisible(false);
       this.cw = cw; this.ch = ch;
-      this.groundY = ch - 56;
       this.length = this.base.length;
       this.cam = 0;
+      this.t = 0;
+      this.computeView();
 
       const weapon = G.derive.weapon(this.state);
       const maxHP = G.derive.maxHP(this.state);
@@ -59,13 +60,20 @@
       this.outcome = null; // 'win' | 'lose'
       this.fadeT = 0;
 
-      this.pal = PALETTES[this.base.biome] || PALETTES.silo;
-      this.ceilingH = Math.max(48, Math.min(130, Math.round(ch * 0.15)));
-      this.t = 0;
-
       this.buildLevel();
       this.initAmbient();
       G.ui.toast(this.base.intro, '');
+    }
+
+    // World view: zoom the action in so actors aren't tiny on tall screens.
+    // The world is drawn in "view units"; ctx.scale blows it up to fill the canvas.
+    computeView() {
+      this.pal = PALETTES[this.base.biome] || PALETTES.silo;
+      this.scale = U.clamp(this.ch / 400, 1, 2.4);
+      this.viewW = this.cw / this.scale;
+      this.viewH = this.ch / this.scale;
+      this.groundY = this.viewH - 48;
+      this.ceilingH = Math.max(40, Math.min(120, Math.round(this.viewH * 0.15)));
     }
 
     // Drifting dust motes in the air, with parallax tied to camera depth.
@@ -75,7 +83,7 @@
       for (let i = 0; i < n; i++) {
         const z = U.rand(0.2, 0.7);
         this.dust.push({
-          wx: this.cam * z + U.rand(0, this.cw),
+          wx: this.cam * z + U.rand(0, this.viewW),
           y: U.rand(this.ceilingH, this.groundY - 8),
           z, r: U.rand(0.6, 2.3),
           a: U.rand(0.05, 0.22),
@@ -85,7 +93,7 @@
     }
 
     updateAmbient() {
-      const cam = this.cam, cw = this.cw;
+      const cam = this.cam, cw = this.viewW;
       for (const m of this.dust) {
         m.y += m.vy; m.wx -= 0.05; // gentle air current
         if (m.y < this.ceilingH) m.y = this.groundY - 8;
@@ -166,12 +174,12 @@
       p.update(this);
 
       // camera follows player
-      const targetCam = U.clamp(p.cx - cw * 0.4, 0, Math.max(0, this.length - cw));
+      const targetCam = U.clamp(p.cx - this.viewW * 0.4, 0, Math.max(0, this.length - this.viewW));
       this.cam += (targetCam - this.cam) * 0.12;
 
       // activate spawns the player has reached
       for (const sp of this.spawns) {
-        if (!sp.used && p.x + cw > sp.x) {
+        if (!sp.used && p.x + this.viewW > sp.x) {
           sp.used = true;
           const def = G.data.enemies[sp.type];
           const ey = def.fly ? this.groundY - 120 : this.groundY - def.h;
@@ -180,7 +188,7 @@
       }
 
       // boss
-      if (!this.bossSpawned && p.x > this.bossX - cw * 0.7) {
+      if (!this.bossSpawned && p.x > this.bossX - this.viewW * 0.7) {
         this.bossSpawned = true;
         const bdef = G.data.bosses[this.base.boss];
         this.boss = new Ent.Boss(bdef, this.bossX, this.groundY - bdef.h - 40);
@@ -197,7 +205,7 @@
 
       // cull
       this.enemies = this.enemies.filter(e => !e.dead);
-      this.bullets = this.bullets.filter(b => !b.dead && b.x > this.cam - 80 && b.x < this.cam + cw + 80);
+      this.bullets = this.bullets.filter(b => !b.dead && b.x > this.cam - 80 && b.x < this.cam + this.viewW + 80);
       this.pickups = this.pickups.filter(p => !p.dead);
       this.particles = this.particles.filter(p => !p.dead);
 
@@ -308,15 +316,18 @@
     // ---------- rendering ----------
     draw(ctx, cw, ch) {
       ctx.clearRect(0, 0, cw, ch);
-      this.drawBackground(ctx, cw, ch);
+      const vw = this.viewW, vh = this.viewH;
+      ctx.save();
+      ctx.scale(this.scale, this.scale);
+      this.drawBackground(ctx, vw, vh);
 
       const cam = this.cam;
       this.drawDust(ctx);
-      this.drawGround(ctx, cw, ch);
-      this.drawPlatforms(ctx, cw);
+      this.drawGround(ctx, vw, vh);
+      this.drawPlatforms(ctx, vw);
       // exit / fragment shrine at the end
       const ex = this.bossX + 120 - cam;
-      if (ex < cw + 100) {
+      if (ex < vw + 100) {
         ctx.save();
         ctx.shadowColor = '#9a6cff'; ctx.shadowBlur = 24;
         ctx.fillStyle = this.fragmentTaken ? '#2a2440' : '#9a6cff';
@@ -331,6 +342,7 @@
       this.bullets.forEach(b => b.draw(ctx, cam));
       this.particles.forEach(p => p.draw(ctx, cam));
       this.player.draw(ctx, cam);
+      ctx.restore();
 
       this.drawPost(ctx, cw, ch);
       this.drawHUD(ctx, cw, ch);
