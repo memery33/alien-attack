@@ -1,0 +1,25 @@
+{
+  "name": "substrata",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SUBSTRATA — Alien Tech Recovery. A side-scrolling base-builder roguelite.",
+  "scripts": {
+    "test": "node tools/headless-test.js",
+    "icons": "node tools/gen-icons.js",
+    "sprites": "node tools/gen-sprites.js",
+    "build:web": "node tools/build-web.js",
+    "cap:sync": "npm run build:web && npx cap sync",
+    "ios": "npm run build:web && npx cap sync ios && npx cap open ios",
+    "android": "npm run build:web && npx cap sync android && npx cap open android"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/ios": "^6.1.0",
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/status-bar": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0"
+  }
+}

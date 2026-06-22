@@ -14,6 +14,7 @@
     last: 0,
 
     init() {
+      this.initNative();
       G.input.init(canvas);
       this.setupPointer();
       this.setupTouchControls();
@@ -27,6 +28,18 @@
       G.story.showTitle((choice) => this.startFromTitle(choice), !!save);
 
       requestAnimationFrame((t) => this.loop(t));
+    },
+
+    // When wrapped by Capacitor (App Store build), hide the native splash once
+    // we're ready and style the status bar. No-ops in a plain browser/PWA.
+    initNative() {
+      const cap = window.Capacitor;
+      if (!cap || !cap.Plugins) return;
+      try {
+        const { SplashScreen, StatusBar } = cap.Plugins;
+        if (StatusBar) { StatusBar.setStyle({ style: 'DARK' }); StatusBar.hide(); }
+        if (SplashScreen) setTimeout(() => SplashScreen.hide(), 400);
+      } catch (e) { /* plugins optional */ }
     },
 
     startFromTitle(choice) {

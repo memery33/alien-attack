@@ -1,0 +1,27 @@
+{
+  "appId": "com.substrata.game",
+  "appName": "SUBSTRATA",
+  "webDir": "www",
+  "backgroundColor": "#05070d",
+  "ios": {
+    "backgroundColor": "#05070d",
+    "contentInset": "never",
+    "scrollEnabled": false
+  },
+  "android": {
+    "backgroundColor": "#05070d"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#05070d",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#05070d",
+      "overlaysWebView": true
+    }
+  }
+}

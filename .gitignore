@@ -3,3 +3,9 @@ node_modules/
 *.log
 .vscode/
 .idea/
+
+# Capacitor build artifacts + generated native projects
+www/
+ios/
+android/
+.capacitor/
