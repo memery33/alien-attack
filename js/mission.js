@@ -357,10 +357,13 @@
       g.addColorStop(0, pal.top); g.addColorStop(0.6, pal.bot); g.addColorStop(1, pal.bot);
       ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
 
-      this.drawFarStructures(ctx, cw, ch);
-      this.drawConduits(ctx, cw);
-      this.drawColumns(ctx, cw);
-      this.drawCeiling(ctx, cw);
+      // A biome art background (if supplied) replaces the procedural facility.
+      if (!G.assets.drawTiled(ctx, 'bg-' + this.base.biome, 0, 0, cw, this.groundY, this.cam * 0.3)) {
+        this.drawFarStructures(ctx, cw, ch);
+        this.drawConduits(ctx, cw);
+        this.drawColumns(ctx, cw);
+        this.drawCeiling(ctx, cw);
+      }
       this.drawFog(ctx, cw, ch);
     }
 
@@ -494,6 +497,8 @@
     // Detailed metal floor: slab, lit edge, scrolling hazard stripe, seams.
     drawGround(ctx, cw, ch) {
       const pal = this.pal, cam = this.cam, gY = this.groundY;
+      // A biome floor strip (if supplied) replaces the procedural floor.
+      if (G.assets.drawTiled(ctx, 'floor-' + this.base.biome, 0, gY - 6, cw, (ch - gY) + 6, cam)) return;
       ctx.fillStyle = pal.struct;
       ctx.fillRect(0, gY, cw, ch - gY);
       // darker base toward the bottom

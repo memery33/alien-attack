@@ -98,7 +98,7 @@ vm.createContext(sandbox);
 // Load the game files in index.html order. Concatenate into one script so the
 // top-level `const G` lexical binding is shared across files (as real <script>
 // tags share it in a browser). Append a trailer to expose G on the context.
-const files = ['util', 'data', 'save', 'audio', 'input', 'entities', 'story', 'base', 'mission', 'main'];
+const files = ['util', 'assets', 'data', 'save', 'audio', 'input', 'entities', 'story', 'base', 'mission', 'main'];
 const combined = files
   .map((f) => fs.readFileSync(path.join(__dirname, '..', 'js', f + '.js'), 'utf8'))
   .join('\n;\n') + '\n;\nthis.G = G;\n';

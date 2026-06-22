@@ -58,6 +58,7 @@
     update() { this.bob += 0.08; }
     draw(ctx, cam) {
       const y = this.y + Math.sin(this.bob) * 4;
+      if (G.assets.drawIn(ctx, 'pickup-' + this.kind, this.x - cam - 3, y - 3, this.w + 6, this.h + 6, false)) return;
       ctx.save();
       const colors = { tech: '#9a6cff', health: '#4be08a', scrap: '#c7a06b' };
       ctx.shadowColor = colors[this.kind]; ctx.shadowBlur = 14;
@@ -158,33 +159,36 @@
 
       ctx.save();
       if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) ctx.globalAlpha = 0.4;
-      // legs (alternating stride)
-      const legSwing = this.onGround ? Math.sin(this.walkAnim) * 4 : 2;
-      ctx.fillStyle = '#202c44';
-      ctx.fillRect(x + 4, y + 30, 7, 14 - legSwing);
-      ctx.fillRect(x + 15, y + 30, 7, 14 + legSwing);
-      // body — armored suit with shading
-      ctx.fillStyle = '#39507a';
-      ctx.fillRect(x + 2, y + 12, this.w - 4, 22);
-      ctx.fillStyle = '#4a6aa0';
-      ctx.fillRect(x + 2, y + 12, this.w - 4, 6);
-      ctx.fillStyle = '#2c4066'; // chest seam
-      ctx.fillRect(x + 2, y + 22, this.w - 4, 2);
-      // backpack
-      ctx.fillStyle = '#2a3a5c';
-      ctx.fillRect(this.facing > 0 ? x : x + this.w - 5, y + 14, 5, 16);
-      // visor head with glow
-      ctx.fillStyle = '#161f30';
-      ctx.fillRect(x + 6, y, 14, 14);
-      ctx.save();
-      ctx.shadowColor = '#36e0d8'; ctx.shadowBlur = 8;
-      ctx.fillStyle = '#46f0e6';
-      ctx.fillRect(x + (this.facing > 0 ? 11 : 7), y + 4, 7, 4);
-      ctx.restore();
-      // gun
-      ctx.fillStyle = '#cdd7e6';
-      const gx = this.facing > 0 ? x + this.w - 2 : x - 12;
-      ctx.fillRect(gx, y + 16, 14, 5);
+      // sprite if available, else procedural armored suit
+      if (!G.assets.drawIn(ctx, 'player', x - 4, y - 6, this.w + 8, this.h + 8, this.facing < 0)) {
+        // legs (alternating stride)
+        const legSwing = this.onGround ? Math.sin(this.walkAnim) * 4 : 2;
+        ctx.fillStyle = '#202c44';
+        ctx.fillRect(x + 4, y + 30, 7, 14 - legSwing);
+        ctx.fillRect(x + 15, y + 30, 7, 14 + legSwing);
+        // body — armored suit with shading
+        ctx.fillStyle = '#39507a';
+        ctx.fillRect(x + 2, y + 12, this.w - 4, 22);
+        ctx.fillStyle = '#4a6aa0';
+        ctx.fillRect(x + 2, y + 12, this.w - 4, 6);
+        ctx.fillStyle = '#2c4066'; // chest seam
+        ctx.fillRect(x + 2, y + 22, this.w - 4, 2);
+        // backpack
+        ctx.fillStyle = '#2a3a5c';
+        ctx.fillRect(this.facing > 0 ? x : x + this.w - 5, y + 14, 5, 16);
+        // visor head with glow
+        ctx.fillStyle = '#161f30';
+        ctx.fillRect(x + 6, y, 14, 14);
+        ctx.save();
+        ctx.shadowColor = '#36e0d8'; ctx.shadowBlur = 8;
+        ctx.fillStyle = '#46f0e6';
+        ctx.fillRect(x + (this.facing > 0 ? 11 : 7), y + 4, 7, 4);
+        ctx.restore();
+        // gun
+        ctx.fillStyle = '#cdd7e6';
+        const gx = this.facing > 0 ? x + this.w - 2 : x - 12;
+        ctx.fillRect(gx, y + 16, 14, 5);
+      }
       // muzzle flash
       if (this.muzzle > 0) {
         const fx = this.facing > 0 ? x + this.w + 10 : x - 10;
@@ -212,6 +216,7 @@
       this.dead = false;
       this.flash = 0;
       this.baseY = y;
+      this.face = -1;
       this.t = Math.random() * Math.PI * 2;
     }
     get cx() { return this.x + this.w / 2; }
@@ -222,6 +227,7 @@
       const def = this.def;
       const dx = p.cx - this.cx;
       const dir = Math.sign(dx) || 1;
+      this.face = dir;
 
       if (def.fly) {
         // hover toward player at a height, bob
@@ -285,27 +291,33 @@
         ctx.fill();
         ctx.restore();
       }
-      ctx.save();
-      ctx.fillStyle = this.flash > 0 ? '#ffffff' : this.def.color;
-      ctx.shadowColor = this.def.color; ctx.shadowBlur = this.def.fly ? 10 : 4;
-      if (this.def.fly) {
-        // saucer drone
-        ctx.beginPath();
-        ctx.ellipse(x + this.w / 2, y + this.h / 2, this.w / 2, this.h / 3, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#0b1018';
-        ctx.fillRect(x + this.w / 2 - 3, y + this.h / 2 - 1, 6, 3);
-      } else if (this.def.fixed) {
-        ctx.fillRect(x, y, this.w, this.h);
-        ctx.fillStyle = '#0b1018';
-        ctx.fillRect(x + 4, y + this.h / 2 - 3, this.w - 8, 6);
+      const eKey = 'enemy-' + this.type;
+      if (G.assets.image(eKey)) {
+        G.assets.drawIn(ctx, eKey, x, y, this.w, this.h, this.face < 0);
+        if (this.flash > 0) { ctx.save(); ctx.globalAlpha = 0.55; ctx.fillStyle = '#fff'; ctx.fillRect(x, y, this.w, this.h); ctx.restore(); }
       } else {
-        // humanoid
-        ctx.fillRect(x + 3, y, this.w - 6, this.h);
-        ctx.fillStyle = '#0b1018';
-        ctx.fillRect(x + 5, y + 4, this.w - 10, 6);
+        ctx.save();
+        ctx.fillStyle = this.flash > 0 ? '#ffffff' : this.def.color;
+        ctx.shadowColor = this.def.color; ctx.shadowBlur = this.def.fly ? 10 : 4;
+        if (this.def.fly) {
+          // saucer drone
+          ctx.beginPath();
+          ctx.ellipse(x + this.w / 2, y + this.h / 2, this.w / 2, this.h / 3, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#0b1018';
+          ctx.fillRect(x + this.w / 2 - 3, y + this.h / 2 - 1, 6, 3);
+        } else if (this.def.fixed) {
+          ctx.fillRect(x, y, this.w, this.h);
+          ctx.fillStyle = '#0b1018';
+          ctx.fillRect(x + 4, y + this.h / 2 - 3, this.w - 8, 6);
+        } else {
+          // humanoid
+          ctx.fillRect(x + 3, y, this.w - 6, this.h);
+          ctx.fillStyle = '#0b1018';
+          ctx.fillRect(x + 5, y + 4, this.w - 10, 6);
+        }
+        ctx.restore();
       }
-      ctx.restore();
       // hp bar
       if (this.hp < this.maxHP) {
         ctx.fillStyle = '#22120f';
@@ -328,6 +340,7 @@
       // float menacingly, track player loosely
       this.y = this.baseY + Math.sin(this.t) * 24;
       const dx = p.cx - this.cx;
+      this.face = Math.sign(dx) || -1;
       if (Math.abs(dx) > 220) this.x += Math.sign(dx) * 1.1;
 
       this.cooldown--;
@@ -348,6 +361,12 @@
     }
     draw(ctx, cam) {
       const x = this.x - cam, y = this.y;
+      const bKey = 'boss-' + (this.def.key || '');
+      if (G.assets.image(bKey)) {
+        G.assets.drawIn(ctx, bKey, x, y, this.w, this.h, this.face < 0);
+        if (this.flash > 0) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.fillRect(x, y, this.w, this.h); ctx.restore(); }
+        return;
+      }
       ctx.save();
       ctx.shadowColor = this.def.color; ctx.shadowBlur = 24;
       ctx.fillStyle = this.flash > 0 ? '#fff' : this.def.color;

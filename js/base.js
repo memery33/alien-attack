@@ -196,20 +196,23 @@
       this.roundRect(ctx, x, y, w, h, r);
       ctx.save(); ctx.clip();
       if (room) {
-        const bg = ctx.createLinearGradient(0, y, 0, y + h);
-        bg.addColorStop(0, '#0f1828'); bg.addColorStop(1, '#0a0f1a');
-        ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
-        // colour wash from the room's accent
-        ctx.globalAlpha = 0.13; ctx.fillStyle = def.color;
-        ctx.fillRect(x, y, w, h * 0.55); ctx.globalAlpha = 1;
-        // floor slab + grate
-        ctx.fillStyle = '#0a1220'; ctx.fillRect(x, floorY, w, y + h - floorY);
-        ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x, floorY, w, 1.5);
-        ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
-        for (let gx = x + 10; gx < x + w; gx += 16) {
-          ctx.beginPath(); ctx.moveTo(gx, floorY + 3); ctx.lineTo(gx - 6, y + h - 1); ctx.stroke();
+        // Room interior art (if supplied) replaces the procedural chamber.
+        if (!G.assets.drawIn(ctx, 'room-' + def.key, x, y, w, h, false)) {
+          const bg = ctx.createLinearGradient(0, y, 0, y + h);
+          bg.addColorStop(0, '#0f1828'); bg.addColorStop(1, '#0a0f1a');
+          ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
+          // colour wash from the room's accent
+          ctx.globalAlpha = 0.13; ctx.fillStyle = def.color;
+          ctx.fillRect(x, y, w, h * 0.55); ctx.globalAlpha = 1;
+          // floor slab + grate
+          ctx.fillStyle = '#0a1220'; ctx.fillRect(x, floorY, w, y + h - floorY);
+          ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x, floorY, w, 1.5);
+          ctx.strokeStyle = 'rgba(0,0,0,0.3)'; ctx.lineWidth = 1;
+          for (let gx = x + 10; gx < x + w; gx += 16) {
+            ctx.beginPath(); ctx.moveTo(gx, floorY + 3); ctx.lineTo(gx - 6, y + h - 1); ctx.stroke();
+          }
         }
-        // crew standing on the floor
+        // crew standing on the floor (always drawn over the interior)
         this.drawCrew(ctx, x + 12, floorY, room.crew, def.color);
       } else {
         // unexcavated dirt

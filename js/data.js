@@ -143,10 +143,10 @@ G.data.enemies = {
 
 /* ----- Bosses ----- */
 G.data.bosses = {
-  sentinel: { name: 'SENTINEL', hp: 240, w: 70, h: 80, dmg: 16, fireRate: 50, color: '#ff8c4a' },
-  warden:   { name: 'THE WARDEN', hp: 420, w: 80, h: 96, dmg: 20, fireRate: 42, color: '#ff5566' },
-  colossus: { name: 'COLOSSUS', hp: 680, w: 110, h: 110, dmg: 24, fireRate: 38, color: '#ffb547' },
-  overmind: { name: 'OVERMIND', hp: 1000, w: 120, h: 130, dmg: 28, fireRate: 30, color: '#9a6cff' },
+  sentinel: { key: 'sentinel', name: 'SENTINEL', hp: 240, w: 70, h: 80, dmg: 16, fireRate: 50, color: '#ff8c4a' },
+  warden:   { key: 'warden', name: 'THE WARDEN', hp: 420, w: 80, h: 96, dmg: 20, fireRate: 42, color: '#ff5566' },
+  colossus: { key: 'colossus', name: 'COLOSSUS', hp: 680, w: 110, h: 110, dmg: 24, fireRate: 38, color: '#ffb547' },
+  overmind: { key: 'overmind', name: 'OVERMIND', hp: 1000, w: 120, h: 130, dmg: 28, fireRate: 30, color: '#9a6cff' },
 };
 
 /* ----- Weapon scaling by Armory level (index = level) ----- */
