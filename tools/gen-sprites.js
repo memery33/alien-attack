@@ -101,6 +101,11 @@ const C = {
   green: [75, 224, 138], greenL: [160, 255, 200],
   scrap: [199, 160, 107], scrapD: [120, 90, 50],
   tech: [154, 108, 255], techL: [210, 200, 255],
+  guard: [211, 154, 94], guardD: [120, 80, 44], guardL: [240, 190, 130],
+  hunter: [60, 66, 82], hunterD: [28, 32, 44], hunterL: [90, 100, 120], eye: [255, 70, 60],
+  amber: [255, 181, 71], amberD: [150, 90, 24], steel: [120, 134, 156], steelD: [60, 70, 88],
+  red: [220, 70, 86], redD: [110, 30, 40],
+  vio: [154, 108, 255], vioD: [70, 40, 120], vioL: [205, 180, 255],
 };
 
 const sprites = {};
@@ -194,6 +199,141 @@ sprites['pickup-tech'] = () => {
   sh.push({ sdf: (x, y) => sdDiamond(x, y, 34), col: C.tech });
   sh.push({ sdf: (x, y) => sdDiamond(x, y, 16), col: C.techL, detail: true });
   return render(w, h, sh, { outline: 2.4, glow: [{ x: cx, y: cy, r: 46, col: C.tech, a: 0.4 }] });
+};
+
+// ---- GUARD (156x240): riot-armor humanoid with stun rifle, facing right ----
+sprites['enemy-guard'] = () => {
+  const w = 156, h = 240, cx = w * 0.45;
+  const sh = [];
+  sh.push({ sdf: (x, y) => sdSeg(x, y, cx - 14, h * 0.6, cx - 16, h * 0.92, 15), col: C.guardD });
+  sh.push({ sdf: (x, y) => sdSeg(x, y, cx + 14, h * 0.6, cx + 18, h * 0.92, 15), col: C.guardD });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx - 14, h * 0.95, 19, 8, 4), col: C.dark });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 20, h * 0.95, 19, 8, 4), col: C.dark });
+  // torso armor
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.44, 33, 40, 11), col: C.guard });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.32, 33, 11, 9), col: C.guardL, detail: true });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.49, 26, 3, 2), col: C.guardD, detail: true });
+  // riot shield on back arm
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx - 30, h * 0.46, 8, 30, 6), col: C.steelD });
+  // front arm + stun rifle
+  sh.push({ sdf: (x, y) => sdSeg(x, y, cx + 8, h * 0.4, cx + 44, h * 0.5, 10), col: C.guardL });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 58, h * 0.5, 22, 6, 3), col: C.steel });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 76, h * 0.5, 5, 4, 2), col: C.amber, detail: true });
+  // helmet + visor
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.19, 24, 22, 10), col: C.dark });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 7, h * 0.18, 11, 6, 3), col: C.amber, detail: true });
+  return render(w, h, sh, { outline: 2.4, glow: [{ x: cx + 11, y: h * 0.18, r: 16, col: C.amber, a: 0.4 }] });
+};
+
+// ---- HUNTER (180x228): lean bipedal killer robot, red eye, clawed legs ----
+sprites['enemy-hunter'] = () => {
+  const w = 180, h = 228, cx = w * 0.46;
+  const sh = [];
+  // digitigrade legs (thigh down-forward, shin down-back to clawed foot)
+  for (const s of [-1, 1]) {
+    const ox = cx + s * 15;
+    sh.push({ sdf: (x, y) => sdSeg(x, y, ox, h * 0.52, ox + 16, h * 0.7, 7), col: C.hunterD });
+    sh.push({ sdf: (x, y) => sdSeg(x, y, ox + 16, h * 0.7, ox - 4, h * 0.9, 6), col: C.hunter });
+    sh.push({ sdf: (x, y) => sdSeg(x, y, ox - 4, h * 0.9, ox + 12, h * 0.95, 4), col: C.hunterD }); // claw
+  }
+  // hunched body
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.42, 26, 26, 12), col: C.hunter });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx - 6, h * 0.33, 24, 9, 8), col: C.hunterL, detail: true });
+  // back blades
+  sh.push({ sdf: (x, y) => sdSeg(x, y, cx - 18, h * 0.3, cx - 34, h * 0.16, 4), col: C.hunterD });
+  // forward-thrust head with single red sensor eye
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 22, h * 0.36, 18, 11, 7), col: C.hunterD });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx + 30, h * 0.36, 5), col: C.eye, detail: true });
+  // raking front claw-arm
+  sh.push({ sdf: (x, y) => sdSeg(x, y, cx + 10, h * 0.42, cx + 40, h * 0.54, 6), col: C.hunter });
+  sh.push({ sdf: (x, y) => sdSeg(x, y, cx + 40, h * 0.54, cx + 54, h * 0.48, 3), col: C.hunterL });
+  return render(w, h, sh, { outline: 2.4, glow: [{ x: cx + 30, y: h * 0.36, r: 18, col: C.eye, a: 0.6 }] });
+};
+
+// ---- BOSS: SENTINEL (280x320) hulking amber-core guardian mech ----
+sprites['boss-sentinel'] = () => {
+  const w = 280, h = 320, cx = w / 2;
+  const sh = [];
+  for (const s of [-1, 1]) {
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 50, h * 0.78, 26, 50, 14), col: C.steelD }); // legs
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 50, h * 0.97, 34, 12, 6), col: C.dark });
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 92, h * 0.34, 30, 34, 14), col: C.steel });  // shoulders
+  }
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.45, 70, 70, 22), col: C.steel });             // torso
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.3, 70, 22, 18), col: C.steelD, detail: true });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, h * 0.46, 26), col: C.amberD, detail: true });          // core housing
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, h * 0.46, 15), col: C.amber, detail: true });           // glowing core
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.14, 30, 22, 12), col: C.steelD });              // head
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.14, 20, 5, 3), col: C.amber, detail: true });   // eye band
+  return render(w, h, sh, { outline: 3, glow: [
+    { x: cx, y: h * 0.46, r: 50, col: C.amber, a: 0.6 }, { x: cx, y: h * 0.14, r: 22, col: C.amber, a: 0.4 },
+  ] });
+};
+
+// ---- BOSS: WARDEN (320x384) towering riot-shield war machine, red optics ----
+sprites['boss-warden'] = () => {
+  const w = 320, h = 384, cx = w / 2;
+  const sh = [];
+  for (const s of [-1, 1]) {
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 46, h * 0.8, 28, 56, 14), col: C.redD });
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 46, h * 0.98, 36, 12, 6), col: C.dark });
+  }
+  // big riot shields as arms
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx - 96, h * 0.5, 26, 76, 12), col: C.steel });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 96, h * 0.5, 26, 76, 12), col: C.steel });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx - 96, h * 0.5, 8, 70, 6), col: C.redD, detail: true });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + 96, h * 0.5, 8, 70, 6), col: C.redD, detail: true });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.46, 60, 78, 20), col: C.steelD });   // torso
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.34, 60, 20, 14), col: C.red, detail: true });
+  // visor row of red optics
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.16, 34, 24, 12), col: C.dark });
+  for (const ex of [-12, 0, 12]) sh.push({ sdf: (x, y) => sdCircle(x, y, cx + ex, h * 0.16, 5), col: C.eye, detail: true });
+  return render(w, h, sh, { outline: 3, glow: [{ x: cx, y: h * 0.16, r: 30, col: C.eye, a: 0.55 }] });
+};
+
+// ---- BOSS: COLOSSUS (440x440) massive armored siege-walker, amber seams ----
+sprites['boss-colossus'] = () => {
+  const w = 440, h = 440, cx = w / 2;
+  const sh = [];
+  for (const s of [-1, 1]) {
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 86, h * 0.74, 44, 84, 18), col: C.steelD }); // legs
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 86, h * 0.96, 56, 18, 8), col: C.dark });
+    sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 86, h * 0.7, 50, 8, 5), col: C.amber, detail: true }); // knee seam
+  }
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.42, 130, 96, 26), col: C.steel });    // huge torso
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.42, 130, 6, 4), col: C.amber, detail: true });
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.3, 130, 8, 5), col: C.amber, detail: true });
+  for (const s of [-1, 1]) sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx + s * 150, h * 0.3, 30, 40, 14), col: C.steelD }); // pauldrons
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.16, 40, 26, 14), col: C.steelD });    // head
+  sh.push({ sdf: (x, y) => sdRoundBox(x, y, cx, h * 0.16, 28, 6, 3), col: C.amber, detail: true });
+  return render(w, h, sh, { outline: 3.4, glow: [
+    { x: cx, y: h * 0.42, r: 80, col: C.amber, a: 0.4 }, { x: cx, y: h * 0.16, r: 26, col: C.amber, a: 0.5 },
+  ] });
+};
+
+// ---- BOSS: OVERMIND (480x520) floating biomechanical brain-core, violet ----
+sprites['boss-overmind'] = () => {
+  const w = 480, h = 520, cx = w / 2, cy = h * 0.4;
+  const sh = [];
+  // dangling bio-mechanical tendrils
+  for (const s of [-1, 1]) {
+    sh.push({ sdf: (x, y) => sdSeg(x, y, cx + s * 40, cy + 70, cx + s * 80, h * 0.92, 10), col: C.vioD });
+    sh.push({ sdf: (x, y) => sdSeg(x, y, cx + s * 20, cy + 80, cx + s * 24, h * 0.95, 7), col: C.vioD });
+  }
+  // metal cradle ring
+  sh.push({ sdf: (x, y) => Math.abs(sdCircle(x, y, cx, cy, 120)) - 9, col: C.steelD });
+  // brain mass (overlapping lobes)
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, cy, 96), col: C.vioD });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx - 36, cy - 10, 56), col: C.vio, detail: true });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx + 36, cy - 10, 56), col: C.vio, detail: true });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, cy + 26, 56), col: C.vio, detail: true });
+  // central eye
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, cy, 30), col: C.dark, detail: true });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, cy, 16), col: C.vioL, detail: true });
+  sh.push({ sdf: (x, y) => sdCircle(x, y, cx, cy, 7), col: C.dark, detail: true });
+  return render(w, h, sh, { outline: 3, glow: [
+    { x: cx, y: cy, r: 130, col: C.vio, a: 0.45 }, { x: cx, y: cy, r: 30, col: C.vioL, a: 0.7 },
+  ] });
 };
 
 // ---- write all ----
