@@ -91,6 +91,7 @@
       this.ammo = weapon.mag; this.reload = 0;
       this.invuln = 0;
       this.walkAnim = 0;
+      this.muzzle = 0;
     }
     get cx() { return this.x + this.w / 2; }
     get cy() { return this.y + this.h / 2; }
@@ -122,6 +123,7 @@
         this.shoot(mission);
       }
       if (this.invuln > 0) this.invuln--;
+      if (this.muzzle > 0) this.muzzle--;
     }
 
     shoot(mission) {
@@ -131,6 +133,9 @@
       const bx = this.facing > 0 ? this.x + this.w : this.x;
       const by = this.y + 16;
       mission.bullets.push(new Bullet(bx, by, this.facing * this.weapon.bulletSpeed, 0, this.weapon.dmg, 'player'));
+      this.muzzle = 4;
+      const mx = this.facing > 0 ? this.x + this.w + 8 : this.x - 8;
+      for (let i = 0; i < 2; i++) mission.particles.push(new Particle(mx, by, '#bfe9ff'));
       G.audio.shoot();
       if (this.ammo === 0) this.reload = 45;
     }
@@ -143,27 +148,54 @@
 
     draw(ctx, cam) {
       const x = this.x - cam, y = this.y;
+      // contact shadow under the feet
+      ctx.save();
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(x + this.w / 2, y + this.h + 1, this.w * 0.55, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
       ctx.save();
       if (this.invuln > 0 && Math.floor(this.invuln / 4) % 2 === 0) ctx.globalAlpha = 0.4;
-      // legs
-      const legSwing = Math.sin(this.walkAnim) * 6;
-      ctx.fillStyle = '#23304a';
-      ctx.fillRect(x + 4, y + 30, 7, 14 + (this.onGround ? legSwing : 0) * 0.0);
-      ctx.fillRect(x + 15, y + 30, 7, 14);
-      // body — armored suit
+      // legs (alternating stride)
+      const legSwing = this.onGround ? Math.sin(this.walkAnim) * 4 : 2;
+      ctx.fillStyle = '#202c44';
+      ctx.fillRect(x + 4, y + 30, 7, 14 - legSwing);
+      ctx.fillRect(x + 15, y + 30, 7, 14 + legSwing);
+      // body — armored suit with shading
       ctx.fillStyle = '#39507a';
       ctx.fillRect(x + 2, y + 12, this.w - 4, 22);
       ctx.fillStyle = '#4a6aa0';
       ctx.fillRect(x + 2, y + 12, this.w - 4, 6);
-      // visor head
-      ctx.fillStyle = '#1a2336';
+      ctx.fillStyle = '#2c4066'; // chest seam
+      ctx.fillRect(x + 2, y + 22, this.w - 4, 2);
+      // backpack
+      ctx.fillStyle = '#2a3a5c';
+      ctx.fillRect(this.facing > 0 ? x : x + this.w - 5, y + 14, 5, 16);
+      // visor head with glow
+      ctx.fillStyle = '#161f30';
       ctx.fillRect(x + 6, y, 14, 14);
-      ctx.fillStyle = '#36e0d8';
-      ctx.fillRect(x + (this.facing > 0 ? 12 : 7), y + 4, 6, 4);
+      ctx.save();
+      ctx.shadowColor = '#36e0d8'; ctx.shadowBlur = 8;
+      ctx.fillStyle = '#46f0e6';
+      ctx.fillRect(x + (this.facing > 0 ? 11 : 7), y + 4, 7, 4);
+      ctx.restore();
       // gun
       ctx.fillStyle = '#cdd7e6';
       const gx = this.facing > 0 ? x + this.w - 2 : x - 12;
       ctx.fillRect(gx, y + 16, 14, 5);
+      // muzzle flash
+      if (this.muzzle > 0) {
+        const fx = this.facing > 0 ? x + this.w + 10 : x - 10;
+        ctx.save();
+        ctx.shadowColor = '#bfe9ff'; ctx.shadowBlur = 12;
+        ctx.fillStyle = '#eafaff';
+        ctx.beginPath();
+        ctx.arc(fx, y + 18, 4 + this.muzzle, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.restore();
     }
   }
@@ -244,9 +276,18 @@
 
     draw(ctx, cam) {
       const x = this.x - cam, y = this.y;
+      // contact shadow for grounded units
+      if (!this.def.fly) {
+        ctx.save();
+        ctx.globalAlpha = 0.28; ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.ellipse(x + this.w / 2, y + this.h + 1, this.w * 0.5, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.save();
       ctx.fillStyle = this.flash > 0 ? '#ffffff' : this.def.color;
-      ctx.shadowColor = this.def.color; ctx.shadowBlur = this.def.fly ? 10 : 0;
+      ctx.shadowColor = this.def.color; ctx.shadowBlur = this.def.fly ? 10 : 4;
       if (this.def.fly) {
         // saucer drone
         ctx.beginPath();
