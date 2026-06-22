@@ -105,7 +105,16 @@ canvas#game {
   max-height: 100%;
   overflow: auto;
   padding: 22px 24px;
+  animation: panel-in .22s cubic-bezier(.2, .9, .3, 1);
 }
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(10px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+#panel-layer { animation: fade-in .18s ease; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.card { transition: border-color .15s, background .15s; }
+.card:hover { border-color: rgba(54,224,216,.35); }
 .panel h2 {
   margin: 0 0 4px;
   font-size: 22px;
