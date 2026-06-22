@@ -146,7 +146,7 @@
         ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(f.text, f.x + 0.8, f.y + 0.8);
         ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
       }
-      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+      ctx.globalAlpha = 1; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
 
     // Subtle screen-space darkening at the edges for a "deep underground" feel.
@@ -261,6 +261,7 @@
       ctx.fillStyle = '#eafffd';
       ctx.font = '700 15px Segoe UI, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('▲  SURFACE HATCH — LAUNCH RAID', h.x + h.w / 2, h.y + h.h / 2);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
 
     drawRoomCell(ctx, cell, def, room) {

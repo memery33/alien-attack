@@ -183,9 +183,9 @@
       const by = this.y + 16;
       mission.bullets.push(new Bullet(bx, by, this.facing * this.weapon.bulletSpeed, 0, this.weapon.dmg, 'player'));
       this.muzzle = 5;
-      // muzzle smoke + a few forward sparks for kick
+      // muzzle smoke + a couple forward sparks for kick
       const mx = this.facing > 0 ? this.x + this.w + 8 : this.x - 8;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         mission.particles.push(new Particle(mx, by, '#bfe9ff', {
           kind: 'spark', vx: this.facing * U.rand(1, 4), vy: U.rand(-1, 1),
           life: U.rand(6, 12), size: U.rand(1, 2.4), grav: 0.05, glow: 6,

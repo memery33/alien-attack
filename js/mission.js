@@ -253,6 +253,8 @@
       this.bullets = this.bullets.filter(b => !b.dead && b.x > this.cam - 80 && b.x < this.cam + this.viewW + 80);
       this.pickups = this.pickups.filter(p => !p.dead);
       this.particles = this.particles.filter(p => !p.dead);
+      // hard cap so sustained fire / chain explosions can't balloon GC on phones
+      if (this.particles.length > 260) this.particles.splice(0, this.particles.length - 260);
 
       // win: boss dead -> drop fragment -> grab it (auto when boss dies we mark)
       if (this.bossSpawned && !this.boss && !this.fragmentTaken) {
@@ -629,7 +631,7 @@
         ctx.fillStyle = f.color;
         ctx.fillText(f.text, f.x - cam, f.y);
       }
-      ctx.globalAlpha = 1; ctx.textAlign = 'left';
+      ctx.globalAlpha = 1; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     }
 
     // Vignette + corner darkening to focus the action.
